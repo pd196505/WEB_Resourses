@@ -29,16 +29,18 @@ CREATE TABLE statuses (
     description TEXT
 );
 
--- 3. Заявки
+-- 3. Заявки (добавлены поля для адресов)
 CREATE TABLE orders (
-    id          SERIAL PRIMARY KEY,
-    client_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    manager_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    driver_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
-    weight      NUMERIC(10,2) NOT NULL CHECK (weight > 0),
-    status_id   INTEGER NOT NULL REFERENCES statuses(id) ON DELETE RESTRICT,
-    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id                SERIAL PRIMARY KEY,
+    client_id         INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    manager_id        INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    driver_id         INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    weight            NUMERIC(10,2) NOT NULL CHECK (weight > 0),
+    status_id         INTEGER NOT NULL REFERENCES statuses(id) ON DELETE RESTRICT,
+    pickup_address    TEXT NOT NULL,
+    delivery_address  TEXT NOT NULL,
+    created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 4. Документы (акты, ТТН)

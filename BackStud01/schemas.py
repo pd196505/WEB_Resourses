@@ -7,7 +7,9 @@ class OrderCreate(BaseModel):
     manager_id: int
     driver_id: Optional[int] = None
     weight: float
-    status_id: int = 1  # по умолчанию "Создана" (id=1)
+    status_id: int = 1
+    pickup_address: str
+    delivery_address: str
 
 class OrderUpdateStatus(BaseModel):
     status_id: int
@@ -22,6 +24,8 @@ class OrderResponse(BaseModel):
     driver_name: Optional[str] = None
     weight: float
     status: Optional[str] = None
+    pickup_address: Optional[str] = None
+    delivery_address: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

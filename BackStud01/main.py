@@ -1,7 +1,13 @@
 from fastapi import FastAPI, HTTPException
 from typing import List, Optional
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from database import get_db_connection, get_db_connection_dict
 from schemas import OrderCreate, OrderUpdateStatus, OrderResponse, ClientResponse
+
+# ============================================================
+# СОЗДАЁМ ПРИЛОЖЕНИЕ (ОБЯЗАТЕЛЬНО ДО ВСЕХ @app...)
+# ============================================================
 
 app = FastAPI(
     title="ТЛК-Портал API",
@@ -10,11 +16,30 @@ app = FastAPI(
 )
 
 # ============================================================
+# НАСТРОЙКА CORS
+# ============================================================
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# ============================================================
+# МОДЕЛЬ ДЛЯ ЛОГИНА
+# ============================================================
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+# ============================================================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ============================================================
 
 def get_schema_prefix():
-    """Возвращает schema prefix для запросов"""
     from database import get_schema
     schema = get_schema()
     return f"{schema}."
@@ -25,10 +50,57 @@ def get_schema_prefix():
 
 @app.get("/", tags=["System"])
 async def root():
-    """Проверка работы API"""
     return {"message": "ТЛК-Портал API работает", "version": "2.0.0"}
 
-# -------- 1. СПИСОК ВСЕХ ЗАЯВОК (GET) --------
+@app.post("/auth/login", tags=["Auth"])
+async def login(request: LoginRequest):
+    schema = get_schema_prefix()
+    conn = get_db_connection_dict()
+    cur = conn.cursor()
+    
+    cur.execute(f"""
+        SELECT id, username, full_name, role, password_hash
+        FROM {schema}users
+        WHERE username = %s
+    """, (request.username,))
+    user = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not user:
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+    
+    if user["password_hash"] != request.password:
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+    
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "full_name": user["full_name"],
+        "role": user["role"],
+    }
+
+@app.get("/users", tags=["Users"])
+async def get_users(role: Optional[str] = None):
+    schema = get_schema_prefix()
+    conn = get_db_connection_dict()
+    cur = conn.cursor()
+    
+    query = f"""
+        SELECT id, username, full_name, role, phone, created_at
+        FROM {schema}users
+    """
+    if role:
+        query += f" WHERE role = %s"
+        cur.execute(query, (role,))
+    else:
+        cur.execute(query)
+    
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return rows
+
 @app.get("/orders", response_model=List[OrderResponse], tags=["Orders"])
 async def get_orders(
     limit: int = 20, 
@@ -36,18 +108,10 @@ async def get_orders(
     role: Optional[str] = None,
     user_id: Optional[int] = None
 ):
-    """
-    Получить список заявок с фильтрацией по роли.
-    - **role**: client, manager, driver
-    - **user_id**: ID пользователя
-    - **limit**: количество записей (по умолчанию 20)
-    - **offset**: смещение для пагинации
-    """
     schema = get_schema_prefix()
     conn = get_db_connection_dict()
     cur = conn.cursor()
     
-    # Базовый запрос
     query = f"""
         SELECT 
             o.id,
@@ -59,6 +123,8 @@ async def get_orders(
             d.full_name AS driver_name,
             o.weight,
             s.name AS status,
+            o.pickup_address,
+            o.delivery_address,
             o.created_at,
             o.updated_at
         FROM {schema}orders o
@@ -68,7 +134,6 @@ async def get_orders(
         LEFT JOIN {schema}statuses s ON o.status_id = s.id
     """
     
-    # Фильтрация по роли
     if role and user_id:
         role_field = {
             "client": "o.client_id",
@@ -92,10 +157,8 @@ async def get_orders(
     
     return rows
 
-# -------- 2. ДЕТАЛИ ОДНОЙ ЗАЯВКИ (GET) --------
 @app.get("/order/{order_id}", response_model=OrderResponse, tags=["Orders"])
 async def get_order(order_id: int):
-    """Получить детальную информацию по одной заявке"""
     schema = get_schema_prefix()
     conn = get_db_connection_dict()
     cur = conn.cursor()
@@ -111,6 +174,8 @@ async def get_order(order_id: int):
             d.full_name AS driver_name,
             o.weight,
             s.name AS status,
+            o.pickup_address,
+            o.delivery_address,
             o.created_at,
             o.updated_at
         FROM {schema}orders o
@@ -130,10 +195,8 @@ async def get_order(order_id: int):
     
     return row
 
-# -------- 3. СПИСОК КЛИЕНТОВ (GET) --------
 @app.get("/clients", response_model=List[ClientResponse], tags=["Clients"])
 async def get_clients():
-    """Получить список всех клиентов"""
     schema = get_schema_prefix()
     conn = get_db_connection_dict()
     cur = conn.cursor()
@@ -151,10 +214,8 @@ async def get_clients():
     
     return rows
 
-# -------- 4. СПИСОК СТАТУСОВ (GET) --------
 @app.get("/statuses", tags=["System"])
 async def get_statuses():
-    """Получить список возможных статусов заявок"""
     schema = get_schema_prefix()
     conn = get_db_connection_dict()
     cur = conn.cursor()
@@ -171,17 +232,18 @@ async def get_statuses():
     
     return rows
 
-# -------- 5. СОЗДАНИЕ ЗАЯВКИ (POST) --------
-@app.post("/orders", response_model=OrderResponse, status_code=201, tags=["Orders"])
+# ============================================================
+# СОЗДАНИЕ ЗАЯВКИ (С ВОЗВРАТОМ СЫРЫХ ДАННЫХ)
+# ============================================================
+
+@app.post("/orders", status_code=201, tags=["Orders"])
 async def create_order(order: OrderCreate):
-    """Создать новую заявку"""
     schema = get_schema_prefix()
     
-    # Проверяем вес
     if order.weight <= 0:
         raise HTTPException(status_code=400, detail="Вес должен быть больше 0")
     
-    # Проверяем существование клиента
+    # Проверка клиента
     conn = get_db_connection_dict()
     cur = conn.cursor()
     cur.execute(f"SELECT id FROM {schema}users WHERE id = %s AND role = 'client'", (order.client_id,))
@@ -190,14 +252,12 @@ async def create_order(order: OrderCreate):
         conn.close()
         raise HTTPException(status_code=404, detail="Клиент не найден")
     
-    # Проверяем существование менеджера
     cur.execute(f"SELECT id FROM {schema}users WHERE id = %s AND role = 'manager'", (order.manager_id,))
     if not cur.fetchone():
         cur.close()
         conn.close()
         raise HTTPException(status_code=404, detail="Менеджер не найден")
     
-    # Если указан водитель — проверяем
     if order.driver_id:
         cur.execute(f"SELECT id FROM {schema}users WHERE id = %s AND role = 'driver'", (order.driver_id,))
         if not cur.fetchone():
@@ -208,61 +268,49 @@ async def create_order(order: OrderCreate):
     cur.close()
     conn.close()
     
-    # Вставляем заявку
     conn = get_db_connection()
     cur = conn.cursor()
     query = f"""
-        INSERT INTO {schema}orders (client_id, manager_id, driver_id, weight, status_id)
-        VALUES (%s, %s, %s, %s, %s)
-        RETURNING id, client_id, manager_id, driver_id, weight, status_id, created_at, updated_at
+        INSERT INTO {schema}orders 
+        (client_id, manager_id, driver_id, weight, status_id, pickup_address, delivery_address)
+        VALUES (%s, %s, %s, %s, %s, %s, %s)
+        RETURNING id, client_id, manager_id, driver_id, weight, status_id, pickup_address, delivery_address, created_at, updated_at
     """
-    cur.execute(query, (order.client_id, order.manager_id, order.driver_id, order.weight, order.status_id))
+    cur.execute(query, (
+        order.client_id, 
+        order.manager_id, 
+        order.driver_id, 
+        order.weight, 
+        order.status_id,
+        order.pickup_address,
+        order.delivery_address
+    ))
     row = cur.fetchone()
-    
-    # Получаем имена
-    conn_dict = get_db_connection_dict()
-    cur_dict = conn_dict.cursor()
-    cur_dict.execute(f"""
-        SELECT 
-            c.full_name AS client_name,
-            m.full_name AS manager_name,
-            d.full_name AS driver_name,
-            s.name AS status
-        FROM {schema}orders o
-        LEFT JOIN {schema}users c ON o.client_id = c.id
-        LEFT JOIN {schema}users m ON o.manager_id = m.id
-        LEFT JOIN {schema}users d ON o.driver_id = d.id
-        LEFT JOIN {schema}statuses s ON o.status_id = s.id
-        WHERE o.id = %s
-    """, (row[0],))
-    names = cur_dict.fetchone()
-    cur_dict.close()
-    conn_dict.close()
-    
     cur.close()
     conn.close()
     
+    # ВОЗВРАЩАЕМ СЫРЫЕ ДАННЫЕ (БЕЗ ВАЛИДАЦИИ)
     return {
         "id": row[0],
         "client_id": row[1],
-        "client_name": names["client_name"] if names else None,
         "manager_id": row[2],
-        "manager_name": names["manager_name"] if names else None,
         "driver_id": row[3],
-        "driver_name": names["driver_name"] if names else None,
         "weight": row[4],
-        "status": names["status"] if names else None,
-        "created_at": row[6],
-        "updated_at": row[7]
+        "status_id": row[5],
+        "pickup_address": row[6],
+        "delivery_address": row[7],
+        "created_at": row[8],
+        "updated_at": row[9]
     }
 
-# -------- 6. ОБНОВЛЕНИЕ СТАТУСА ЗАЯВКИ (PUT) --------
+# ============================================================
+# ОБНОВЛЕНИЕ СТАТУСА
+# ============================================================
+
 @app.put("/order/{order_id}/status", response_model=OrderResponse, tags=["Orders"])
 async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
-    """Изменить статус заявки"""
     schema = get_schema_prefix()
     
-    # Проверяем существование заявки
     conn_dict = get_db_connection_dict()
     cur_dict = conn_dict.cursor()
     cur_dict.execute(f"SELECT id FROM {schema}orders WHERE id = %s", (order_id,))
@@ -273,7 +321,6 @@ async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
     cur_dict.close()
     conn_dict.close()
     
-    # Проверяем существование статуса
     conn_dict = get_db_connection_dict()
     cur_dict = conn_dict.cursor()
     cur_dict.execute(f"SELECT id FROM {schema}statuses WHERE id = %s", (status_update.status_id,))
@@ -284,19 +331,17 @@ async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
     cur_dict.close()
     conn_dict.close()
     
-    # Обновляем статус
     conn = get_db_connection()
     cur = conn.cursor()
     query = f"""
         UPDATE {schema}orders 
         SET status_id = %s, updated_at = CURRENT_TIMESTAMP
         WHERE id = %s
-        RETURNING id, client_id, manager_id, driver_id, weight, status_id, created_at, updated_at
+        RETURNING id, client_id, manager_id, driver_id, weight, status_id, pickup_address, delivery_address, created_at, updated_at
     """
     cur.execute(query, (status_update.status_id, order_id))
     row = cur.fetchone()
     
-    # Получаем имена
     conn_dict = get_db_connection_dict()
     cur_dict = conn_dict.cursor()
     cur_dict.execute(f"""
@@ -329,12 +374,14 @@ async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
         "driver_name": names["driver_name"] if names else None,
         "weight": row[4],
         "status": names["status"] if names else None,
-        "created_at": row[6],
-        "updated_at": row[7]
+        "pickup_address": row[5] if row[5] is not None else "",
+        "delivery_address": row[6] if row[6] is not None else "",
+        "created_at": row[7],
+        "updated_at": row[8]
     }
 
 # ============================================================
-# ЗАПУСК (для отладки)
+# ЗАПУСК
 # ============================================================
 if __name__ == "__main__":
     import uvicorn
