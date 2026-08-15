@@ -1,4 +1,19 @@
-const state = { currentPage: 'main', user: null, orders: [], clients: [], statuses: [], managers: [] };
+// ============================================================
+// ГЛОБАЛЬНОЕ СОСТОЯНИЕ И ОБЩИЕ ФУНКЦИИ
+// ============================================================
+
+const state = { 
+    currentPage: 'main', 
+    user: null, 
+    orders: [], 
+    filteredOrders: [], 
+    clients: [], 
+    statuses: [], 
+    managers: [],
+    drivers: [],
+    statusFilter: null,
+    driverFilter: null
+};
 const API_URL = 'http://localhost:8000';
 
 function getStatusLabel(status) { return status; }
@@ -15,10 +30,6 @@ async function apiFetch(endpoint, options = {}) {
     }
     return response.json();
 }
-
-// ============================================================
-// АВТОРИЗАЦИЯ (ВХОД)
-// ============================================================
 
 async function login(username, password, role) {
     const response = await fetch(`${API_URL}/auth/login`, {
@@ -37,19 +48,17 @@ async function login(username, password, role) {
     return user;
 }
 
-// ============================================================
-// ЗАГРУЗКА ДАННЫХ
-// ============================================================
-
 async function loadOrders() {
     if (!state.user) return;
     try {
         const url = `/orders?role=${state.user.role}&user_id=${state.user.id}`;
         state.orders = await apiFetch(url);
+        state.filteredOrders = [...state.orders];
         console.log('Загруженные заявки:', state.orders);
     } catch (error) {
         console.error('Ошибка загрузки заявок:', error);
         state.orders = [];
+        state.filteredOrders = [];
     }
 }
 
@@ -68,9 +77,253 @@ async function loadManagers() {
     }
 }
 
+async function loadDrivers() {
+    try {
+        const response = await fetch(`${API_URL}/users?role=driver`);
+        state.drivers = await response.json();
+        console.log('Загруженные водители:', state.drivers);
+    } catch (error) {
+        console.error('Ошибка загрузки водителей:', error);
+        state.drivers = [];
+    }
+}
+
 function getRandomManager() {
     if (!state.managers || state.managers.length === 0) return null;
     return state.managers[Math.floor(Math.random() * state.managers.length)];
+}
+
+function filterOrdersByStatus(status) {
+    state.statusFilter = status;
+    applyFilters();
+}
+
+function filterOrdersByDriver(driverName) {
+    state.driverFilter = driverName;
+    applyFilters();
+}
+
+function applyFilters() {
+    let result = [...state.orders];
+    if (state.statusFilter) {
+        result = result.filter(o => o.status === state.statusFilter);
+    }
+    if (state.driverFilter) {
+        result = result.filter(o => o.driver_name === state.driverFilter);
+    }
+    state.filteredOrders = result;
+    renderCurrentPage();
+}
+
+function resetFilters() {
+    state.statusFilter = null;
+    state.driverFilter = null;
+    state.filteredOrders = [...state.orders];
+    renderCurrentPage();
+}
+
+function getUniqueStatuses() {
+    const statuses = new Set();
+    const orders = state.filteredOrders.length > 0 ? state.filteredOrders : state.orders;
+    orders.forEach(o => statuses.add(o.status));
+    return Array.from(statuses);
+}
+
+function getUniqueDrivers() {
+    const drivers = new Set();
+    const orders = state.filteredOrders.length > 0 ? state.filteredOrders : state.orders;
+    orders.forEach(o => {
+        if (o.driver_name) drivers.add(o.driver_name);
+    });
+    return Array.from(drivers);
+}
+
+// ============================================================
+// КОНТЕКСТНОЕ МЕНЮ (СТАТУС)
+// ============================================================
+
+function showContextMenu(e, status) {
+    e.preventDefault();
+    const menu = document.getElementById('context-menu');
+    const statuses = getUniqueStatuses();
+    if (!statuses.length) {
+        menu.style.display = 'none';
+        return;
+    }
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+    menu.style.display = 'block';
+    menu.innerHTML = '';
+    const resetItem = document.createElement('div');
+    resetItem.className = 'context-item';
+    resetItem.textContent = '🔄 Сбросить фильтр';
+    resetItem.style.borderBottom = '1px solid #e0e0e0';
+    resetItem.onclick = () => {
+        filterOrdersByStatus(null);
+        menu.style.display = 'none';
+    };
+    menu.appendChild(resetItem);
+    statuses.forEach(s => {
+        const item = document.createElement('div');
+        item.className = 'context-item';
+        item.textContent = s;
+        if (state.statusFilter === s) {
+            item.style.backgroundColor = '#e8f0fe';
+            item.style.fontWeight = 'bold';
+        }
+        item.onclick = () => {
+            filterOrdersByStatus(s);
+            menu.style.display = 'none';
+        };
+        menu.appendChild(item);
+    });
+}
+
+// ============================================================
+// КОНТЕКСТНОЕ МЕНЮ (ВОДИТЕЛЬ — ФИЛЬТР)
+// ============================================================
+
+function showDriverContextMenu(e, driver) {
+    e.preventDefault();
+    const menu = document.getElementById('context-menu');
+    const drivers = getUniqueDrivers();
+    if (!drivers.length) {
+        menu.style.display = 'none';
+        return;
+    }
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+    menu.style.display = 'block';
+    menu.innerHTML = '';
+    const resetItem = document.createElement('div');
+    resetItem.className = 'context-item';
+    resetItem.textContent = '🔄 Сбросить фильтр';
+    resetItem.style.borderBottom = '1px solid #e0e0e0';
+    resetItem.onclick = () => {
+        filterOrdersByDriver(null);
+        menu.style.display = 'none';
+    };
+    menu.appendChild(resetItem);
+    drivers.forEach(d => {
+        const item = document.createElement('div');
+        item.className = 'context-item';
+        item.textContent = d;
+        if (state.driverFilter === d) {
+            item.style.backgroundColor = '#e8f0fe';
+            item.style.fontWeight = 'bold';
+        }
+        item.onclick = () => {
+            filterOrdersByDriver(d);
+            menu.style.display = 'none';
+        };
+        menu.appendChild(item);
+    });
+}
+
+// ============================================================
+// КОНТЕКСТНОЕ МЕНЮ (ВОДИТЕЛЬ — ВЫБОР)
+// ============================================================
+
+function showDriverSelectionMenu(e, orderId, currentDriver) {
+    e.preventDefault();
+    const menu = document.getElementById('context-menu');
+    if (!state.drivers || state.drivers.length === 0) {
+        alert('Список водителей не загружен');
+        return;
+    }
+
+    let x = e.clientX || window.innerWidth / 2 - 100;
+    let y = e.clientY || window.innerHeight / 2 - 100;
+    
+    menu.style.left = x + 'px';
+    menu.style.top = y + 'px';
+    menu.style.display = 'block';
+    menu.innerHTML = '';
+
+    const header = document.createElement('div');
+    header.className = 'context-item';
+    header.textContent = '👨‍✈️ Выберите водителя';
+    header.style.fontWeight = 'bold';
+    header.style.borderBottom = '1px solid #e0e0e0';
+    header.style.cursor = 'default';
+    menu.appendChild(header);
+
+    if (currentDriver && currentDriver !== '') {
+        const currentItem = document.createElement('div');
+        currentItem.className = 'context-item';
+        currentItem.textContent = '✅ Текущий: ' + currentDriver;
+        currentItem.style.backgroundColor = '#e8f0fe';
+        currentItem.style.cursor = 'default';
+        menu.appendChild(currentItem);
+    }
+
+    state.drivers.forEach(function(d) {
+        const item = document.createElement('div');
+        item.className = 'context-item';
+        const isCurrent = d.full_name === currentDriver;
+        item.textContent = isCurrent ? '✓ ' + d.full_name : d.full_name;
+        if (isCurrent) {
+            item.style.backgroundColor = '#e8f0fe';
+            item.style.fontWeight = 'bold';
+        }
+        item.onclick = function() {
+            menu.style.display = 'none';
+            assignDriver(orderId, d.id);
+        };
+        menu.appendChild(item);
+    });
+
+    if (currentDriver && currentDriver !== '') {
+        const removeItem = document.createElement('div');
+        removeItem.className = 'context-item';
+        removeItem.textContent = '❌ Снять водителя';
+        removeItem.style.borderTop = '1px solid #e0e0e0';
+        removeItem.style.color = '#EA4335';
+        removeItem.onclick = function() {
+            menu.style.display = 'none';
+            assignDriver(orderId, null);
+        };
+        menu.appendChild(removeItem);
+    }
+}
+
+async function assignDriver(orderId, driverId) {
+    try {
+        const order = state.orders.find(o => o.id === orderId);
+        if (!order) {
+            alert('Заявка не найдена');
+            return;
+        }
+
+        // Проверка статуса
+        const allowedStatuses = ['Создана', 'Назначена'];
+        if (!allowedStatuses.includes(order.status)) {
+            alert('❌ Нельзя назначить водителя. Статус заявки должен быть "Создана" или "Назначена".');
+            return;
+        }
+
+        const assignedStatus = state.statuses.find(s => s.name === 'Назначена');
+        if (!assignedStatus) {
+            alert('Статус "Назначена" не найден');
+            return;
+        }
+
+        await apiFetch(`/order/${orderId}/assign`, {
+            method: 'PUT',
+            body: JSON.stringify({ 
+                driver_id: driverId,
+                status_id: assignedStatus.id 
+            }),
+        });
+
+        alert('✅ Водитель назначен!');
+        await loadOrders();
+        resetFilters();
+        renderCurrentPage();
+    } catch (error) {
+        console.error('Ошибка назначения водителя:', error);
+        alert('❌ Ошибка назначения водителя: ' + error.message);
+    }
 }
 
 // ============================================================
@@ -82,24 +335,20 @@ async function createOrder(pickupAddress, deliveryAddress, weight) {
         alert('Пользователь не авторизован');
         return;
     }
-
     try {
         if (!state.managers || state.managers.length === 0) {
             await loadManagers();
         }
-
         const manager = getRandomManager();
         if (!manager) {
             alert('Нет доступных менеджеров в системе');
             return;
         }
-
         const createdStatus = state.statuses.find(s => s.name === 'Создана');
         if (!createdStatus) {
             alert('Статус "Создана" не найден');
             return;
         }
-
         const orderData = {
             client_id: state.user.id,
             manager_id: manager.id,
@@ -109,18 +358,15 @@ async function createOrder(pickupAddress, deliveryAddress, weight) {
             pickup_address: pickupAddress,
             delivery_address: deliveryAddress
         };
-
         console.log('📦 Данные заявки:', orderData);
-
         await apiFetch('/orders', {
             method: 'POST',
             body: JSON.stringify(orderData),
         });
-
         alert('✅ Заявка создана! Менеджер: ' + manager.full_name);
         await loadOrders();
+        resetFilters();
         navigate('lkk');
-
     } catch (error) {
         console.error('❌ Ошибка создания заявки:', error);
         alert('❌ Ошибка создания заявки: ' + error.message);
@@ -135,6 +381,7 @@ async function updateOrderStatus(orderId, statusId) {
         });
         alert('✅ Статус обновлён');
         await loadOrders();
+        resetFilters();
         navigate('lkm');
     } catch (error) {
         alert('❌ Ошибка обновления статуса: ' + error.message);
@@ -142,7 +389,7 @@ async function updateOrderStatus(orderId, statusId) {
 }
 
 // ============================================================
-// ОТРИСОВКА СТРАНИЦ
+// ОТРИСОВКА СТРАНИЦ (КРОМЕ ЛКК, ЛКМ, ЛКВ)
 // ============================================================
 
 function renderMain() {
@@ -185,23 +432,21 @@ function renderLogin(role) {
 async function handleLogin(role) {
     const username = document.getElementById('login-username').value;
     const password = document.getElementById('login-password').value;
-
     if (!username || !password) {
         alert('Введите логин и пароль');
         return;
     }
-
     try {
         const user = await login(username, password, role);
         state.user = user;
         await loadStatuses();
         await loadManagers();
+        await loadDrivers();
         await loadOrders();
-
+        resetFilters();
         if (role === 'client') navigate('lkk');
         else if (role === 'manager') navigate('lkm');
         else if (role === 'driver') navigate('lkv');
-
     } catch (error) {
         alert('❌ Ошибка входа: ' + error.message);
     }
@@ -212,9 +457,9 @@ function navigate(page, param = null) {
     const pages = {
         main: renderMain,
         login: () => renderLogin(param),
-        lkk: renderLKK,
-        lkm: renderLKM,
-        lkv: renderLKV,
+        lkk: renderLKK,   // из lkk.js
+        lkm: renderLKM,   // из lkm.js
+        lkv: renderLKV,   // из lkv.js
         'create-order': renderCreateOrder,
         'edit-order': () => renderEditOrder(param),
         contacts: renderContacts,
@@ -223,140 +468,11 @@ function navigate(page, param = null) {
     (pages[page] || renderMain)();
 }
 
-// ============================================================
-// ОТРИСОВКА ЛИЧНЫХ КАБИНЕТОВ
-// ============================================================
-
-function renderLKK() {
-    let rows = state.orders.map(o => {
-        const date = new Date(o.created_at);
-        const formattedDate = date.toLocaleDateString('ru-RU', {
-            day: '2-digit',
-            month: '2-digit',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-
-        return `
-        <tr>
-            <td>${o.id}</td>
-            <td>${formattedDate}</td>
-            <td>${o.weight}</td>
-            <td><span class="status status-${o.status}">${o.status}</span></td>
-            <td>${o.pickup_address || 'Не указан'}</td>
-            <td>${o.delivery_address || 'Не указан'}</td>
-            <td>${o.manager_name || 'Не назначен'}</td>
-        </tr>
-    `}).join('');
-
-    document.getElementById('app').innerHTML = `
-        <div class="header">
-            <div class="logo" onclick="navigate('main')">ТЛК Портал</div>
-            <div class="user-info">
-                <span class="name">${state.user.full_name}</span>
-                <span class="back-btn" onclick="navigate('main')" style="cursor:pointer; font-size:20px; margin-left:15px;">←</span>
-            </div>
-        </div>
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:20px 40px 0 40px;">
-            <h1 class="page-title" style="padding:0;">Мои заявки</h1>
-            <button class="btn-primary" onclick="navigate('create-order')">+ Создать заявку</button>
-        </div>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>№</th>
-                        <th>Дата</th>
-                        <th>Вес (кг)</th>
-                        <th>Статус</th>
-                        <th>Адрес отправления</th>
-                        <th>Адрес доставки</th>
-                        <th>Менеджер</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rows || '<tr><td colspan="7" style="text-align:center;color:#5F6368;">Нет заявок</td></tr>'}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
-
-function renderLKM() {
-    let rows = state.orders.map(o => `
-        <tr style="cursor:pointer;" onclick="navigate('edit-order', ${o.id})">
-            <td>${o.id}</td>
-            <td>${o.client_name}</td>
-            <td>${o.weight}</td>
-            <td><span class="status status-${o.status}">${o.status}</span></td>
-            <td><span style="color:#1A73E8;">✏️ редактировать</span></td>
-        </tr>
-    `).join('');
-
-    document.getElementById('app').innerHTML = `
-        <div class="header">
-            <div class="logo" onclick="navigate('main')">ТЛК Портал</div>
-            <div class="user-info">
-                <span class="name">${state.user.full_name}</span>
-                <span class="back-btn" onclick="navigate('main')" style="cursor:pointer; font-size:20px; margin-left:15px;">←</span>
-            </div>
-        </div>
-        <h1 class="page-title">Все заявки</h1>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>№</th>
-                        <th>Клиент</th>
-                        <th>Вес</th>
-                        <th>Статус</th>
-                        <th>Действие</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rows || '<tr><td colspan="5" style="text-align:center;">Нет заявок</td></tr>'}
-                </tbody>
-            </table>
-        </div>
-    `;
-}
-
-function renderLKV() {
-    let rows = state.orders.map(o => `
-        <tr>
-            <td>${o.id}</td>
-            <td>${o.client_name}</td>
-            <td>${o.weight}</td>
-            <td><span class="status status-${o.status}">${o.status}</span></td>
-        </tr>
-    `).join('');
-
-    document.getElementById('app').innerHTML = `
-        <div class="header">
-            <div class="logo" onclick="navigate('main')">ТЛК Портал</div>
-            <div class="user-info">
-                <span class="name">${state.user.full_name}</span>
-                <span class="back-btn" onclick="navigate('main')" style="cursor:pointer; font-size:20px; margin-left:15px;">←</span>
-            </div>
-        </div>
-        <h1 class="page-title">Мои рейсы</h1>
-        <div class="table-container">
-            <table>
-                <thead>
-                    <tr>
-                        <th>№</th>
-                        <th>Клиент</th>
-                        <th>Вес</th>
-                        <th>Статус</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rows || '<tr><td colspan="4" style="text-align:center;">Нет рейсов</td></tr>'}
-                </tbody>
-            </table>
-        </div>
-    `;
+function renderCurrentPage() {
+    const page = state.currentPage;
+    if (page === 'lkk') renderLKK();
+    else if (page === 'lkm') renderLKM();
+    else if (page === 'lkv') renderLKV();
 }
 
 // ============================================================
@@ -378,12 +494,10 @@ function renderCreateOrder() {
             <div class="form-group"><label>Город</label><input type="text" id="pickup-city" placeholder="Введите город"></div>
             <div class="form-group"><label>Улица</label><input type="text" id="pickup-street" placeholder="Введите улицу"></div>
             <div class="form-group"><label>Дом</label><input type="text" id="pickup-house" placeholder="Введите дом"></div>
-
             <h3 style="margin:20px 0 10px 0;">📍 Адрес доставки</h3>
             <div class="form-group"><label>Город</label><input type="text" id="delivery-city" placeholder="Введите город"></div>
             <div class="form-group"><label>Улица</label><input type="text" id="delivery-street" placeholder="Введите улицу"></div>
             <div class="form-group"><label>Дом</label><input type="text" id="delivery-house" placeholder="Введите дом"></div>
-
             <div class="form-group"><label>Вес (кг)</label><input type="number" id="order-weight" placeholder="Введите вес"></div>
             <button class="btn-primary" onclick="handleCreateOrder()">Создать заявку</button>
         </div>
@@ -398,15 +512,12 @@ async function handleCreateOrder() {
     const deliveryStreet = document.getElementById('delivery-street').value;
     const deliveryHouse = document.getElementById('delivery-house').value;
     const weight = document.getElementById('order-weight').value;
-
     if (!pickupCity || !pickupStreet || !pickupHouse || !deliveryCity || !deliveryStreet || !deliveryHouse || !weight) {
         alert('Заполните все поля');
         return;
     }
-
     const pickupAddress = `${pickupCity}, ${pickupStreet}, ${pickupHouse}`;
     const deliveryAddress = `${deliveryCity}, ${deliveryStreet}, ${deliveryHouse}`;
-    
     await createOrder(pickupAddress, deliveryAddress, weight);
 }
 
@@ -420,11 +531,9 @@ function renderEditOrder(orderId) {
         document.getElementById('app').innerHTML = '<div style="padding:40px;">Заявка не найдена</div>';
         return;
     }
-
     let options = state.statuses.map(s =>
         `<option value="${s.id}" ${s.name === order.status ? 'selected' : ''}>${s.name}</option>`
     ).join('');
-
     document.getElementById('app').innerHTML = `
         <div class="header">
             <div class="logo" onclick="navigate('main')">ТЛК Портал</div>
@@ -486,6 +595,65 @@ function renderAbout() {
         </div>
     `;
 }
+
+// ============================================================
+// КОНТЕКСТНОЕ МЕНЮ (HTML)
+// ============================================================
+
+const contextMenu = document.createElement('div');
+contextMenu.id = 'context-menu';
+contextMenu.style.cssText = `
+    position: fixed;
+    display: none;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    min-width: 150px;
+    z-index: 1000;
+    padding: 4px 0;
+    font-size: 14px;
+    font-family: inherit;
+`;
+document.body.appendChild(contextMenu);
+
+const style = document.createElement('style');
+style.textContent = `
+    .context-item {
+        padding: 8px 16px;
+        cursor: pointer;
+        transition: background 0.15s;
+    }
+    .context-item:hover {
+        background: #f1f3f4;
+    }
+`;
+document.head.appendChild(style);
+
+document.addEventListener('click', (e) => {
+    if (!e.target.closest('#context-menu')) {
+        const menu = document.getElementById('context-menu');
+        if (menu) menu.style.display = 'none';
+    }
+});
+
+document.addEventListener('contextmenu', (e) => {
+    if (!e.target.closest('.status-cell') && !e.target.closest('.driver-cell')) {
+        const menu = document.getElementById('context-menu');
+        if (menu) menu.style.display = 'none';
+    }
+});
+
+// ============================================================
+// ДЕЛАЕМ ФУНКЦИИ ГЛОБАЛЬНЫМИ
+// ============================================================
+
+window.showDriverSelectionMenu = showDriverSelectionMenu;
+window.assignDriver = assignDriver;
+window.filterOrdersByStatus = filterOrdersByStatus;
+window.filterOrdersByDriver = filterOrdersByDriver;
+window.showContextMenu = showContextMenu;
+window.showDriverContextMenu = showDriverContextMenu;
 
 // ============================================================
 // ЗАПУСК

@@ -5,10 +5,6 @@ from pydantic import BaseModel
 from database import get_db_connection, get_db_connection_dict
 from schemas import OrderCreate, OrderUpdateStatus, OrderResponse, ClientResponse
 
-# ============================================================
-# СОЗДАЁМ ПРИЛОЖЕНИЕ (ОБЯЗАТЕЛЬНО ДО ВСЕХ @app...)
-# ============================================================
-
 app = FastAPI(
     title="ТЛК-Портал API",
     description="API для управления заявками на перевозку",
@@ -52,6 +48,7 @@ def get_schema_prefix():
 async def root():
     return {"message": "ТЛК-Портал API работает", "version": "2.0.0"}
 
+# -------- АВТОРИЗАЦИЯ --------
 @app.post("/auth/login", tags=["Auth"])
 async def login(request: LoginRequest):
     schema = get_schema_prefix()
@@ -80,6 +77,7 @@ async def login(request: LoginRequest):
         "role": user["role"],
     }
 
+# -------- СПИСОК ПОЛЬЗОВАТЕЛЕЙ --------
 @app.get("/users", tags=["Users"])
 async def get_users(role: Optional[str] = None):
     schema = get_schema_prefix()
@@ -101,6 +99,7 @@ async def get_users(role: Optional[str] = None):
     conn.close()
     return rows
 
+# -------- 1. СПИСОК ВСЕХ ЗАЯВОК --------
 @app.get("/orders", response_model=List[OrderResponse], tags=["Orders"])
 async def get_orders(
     limit: int = 20, 
@@ -157,6 +156,7 @@ async def get_orders(
     
     return rows
 
+# -------- 2. ДЕТАЛИ ЗАЯВКИ --------
 @app.get("/order/{order_id}", response_model=OrderResponse, tags=["Orders"])
 async def get_order(order_id: int):
     schema = get_schema_prefix()
@@ -195,6 +195,7 @@ async def get_order(order_id: int):
     
     return row
 
+# -------- 3. СПИСОК КЛИЕНТОВ --------
 @app.get("/clients", response_model=List[ClientResponse], tags=["Clients"])
 async def get_clients():
     schema = get_schema_prefix()
@@ -214,6 +215,7 @@ async def get_clients():
     
     return rows
 
+# -------- 4. СПИСОК СТАТУСОВ --------
 @app.get("/statuses", tags=["System"])
 async def get_statuses():
     schema = get_schema_prefix()
@@ -232,18 +234,14 @@ async def get_statuses():
     
     return rows
 
-# ============================================================
-# СОЗДАНИЕ ЗАЯВКИ (С ВОЗВРАТОМ СЫРЫХ ДАННЫХ)
-# ============================================================
-
-@app.post("/orders", status_code=201, tags=["Orders"])
+# -------- 5. СОЗДАНИЕ ЗАЯВКИ --------
+@app.post("/orders", response_model=OrderResponse, status_code=201, tags=["Orders"])
 async def create_order(order: OrderCreate):
     schema = get_schema_prefix()
     
     if order.weight <= 0:
         raise HTTPException(status_code=400, detail="Вес должен быть больше 0")
     
-    # Проверка клиента
     conn = get_db_connection_dict()
     cur = conn.cursor()
     cur.execute(f"SELECT id FROM {schema}users WHERE id = %s AND role = 'client'", (order.client_id,))
@@ -286,61 +284,6 @@ async def create_order(order: OrderCreate):
         order.delivery_address
     ))
     row = cur.fetchone()
-    cur.close()
-    conn.close()
-    
-    # ВОЗВРАЩАЕМ СЫРЫЕ ДАННЫЕ (БЕЗ ВАЛИДАЦИИ)
-    return {
-        "id": row[0],
-        "client_id": row[1],
-        "manager_id": row[2],
-        "driver_id": row[3],
-        "weight": row[4],
-        "status_id": row[5],
-        "pickup_address": row[6],
-        "delivery_address": row[7],
-        "created_at": row[8],
-        "updated_at": row[9]
-    }
-
-# ============================================================
-# ОБНОВЛЕНИЕ СТАТУСА
-# ============================================================
-
-@app.put("/order/{order_id}/status", response_model=OrderResponse, tags=["Orders"])
-async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
-    schema = get_schema_prefix()
-    
-    conn_dict = get_db_connection_dict()
-    cur_dict = conn_dict.cursor()
-    cur_dict.execute(f"SELECT id FROM {schema}orders WHERE id = %s", (order_id,))
-    if not cur_dict.fetchone():
-        cur_dict.close()
-        conn_dict.close()
-        raise HTTPException(status_code=404, detail="Заявка не найдена")
-    cur_dict.close()
-    conn_dict.close()
-    
-    conn_dict = get_db_connection_dict()
-    cur_dict = conn_dict.cursor()
-    cur_dict.execute(f"SELECT id FROM {schema}statuses WHERE id = %s", (status_update.status_id,))
-    if not cur_dict.fetchone():
-        cur_dict.close()
-        conn_dict.close()
-        raise HTTPException(status_code=404, detail="Статус не найден")
-    cur_dict.close()
-    conn_dict.close()
-    
-    conn = get_db_connection()
-    cur = conn.cursor()
-    query = f"""
-        UPDATE {schema}orders 
-        SET status_id = %s, updated_at = CURRENT_TIMESTAMP
-        WHERE id = %s
-        RETURNING id, client_id, manager_id, driver_id, weight, status_id, pickup_address, delivery_address, created_at, updated_at
-    """
-    cur.execute(query, (status_update.status_id, order_id))
-    row = cur.fetchone()
     
     conn_dict = get_db_connection_dict()
     cur_dict = conn_dict.cursor()
@@ -374,15 +317,155 @@ async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
         "driver_name": names["driver_name"] if names else None,
         "weight": row[4],
         "status": names["status"] if names else None,
-        "pickup_address": row[5] if row[5] is not None else "",
-        "delivery_address": row[6] if row[6] is not None else "",
-        "created_at": row[7],
-        "updated_at": row[8]
+        "pickup_address": row[6] if row[6] is not None else "",
+        "delivery_address": row[7] if row[7] is not None else "",
+        "created_at": row[8],
+        "updated_at": row[9]
     }
+
+# -------- 6. ОБНОВЛЕНИЕ СТАТУСА (ИСПРАВЛЕННЫЙ) --------
+@app.put("/order/{order_id}/status", response_model=OrderResponse, tags=["Orders"])
+async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
+    schema = get_schema_prefix()
+    
+    # Проверяем существование заявки
+    conn_dict = get_db_connection_dict()
+    cur_dict = conn_dict.cursor()
+    cur_dict.execute(f"SELECT id FROM {schema}orders WHERE id = %s", (order_id,))
+    if not cur_dict.fetchone():
+        cur_dict.close()
+        conn_dict.close()
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    cur_dict.close()
+    conn_dict.close()
+    
+    # Проверяем существование статуса
+    conn_dict = get_db_connection_dict()
+    cur_dict = conn_dict.cursor()
+    cur_dict.execute(f"SELECT id FROM {schema}statuses WHERE id = %s", (status_update.status_id,))
+    if not cur_dict.fetchone():
+        cur_dict.close()
+        conn_dict.close()
+        raise HTTPException(status_code=404, detail="Статус не найден")
+    cur_dict.close()
+    conn_dict.close()
+    
+    # Обновляем статус
+    conn = get_db_connection()
+    cur = conn.cursor()
+    query = f"""
+        UPDATE {schema}orders 
+        SET status_id = %s, updated_at = CURRENT_TIMESTAMP
+        WHERE id = %s
+        RETURNING id, client_id, manager_id, driver_id, weight, status_id, pickup_address, delivery_address, created_at, updated_at
+    """
+    cur.execute(query, (status_update.status_id, order_id))
+    row = cur.fetchone()
+    
+    # Получаем имена
+    conn_dict = get_db_connection_dict()
+    cur_dict = conn_dict.cursor()
+    cur_dict.execute(f"""
+        SELECT 
+            c.full_name AS client_name,
+            m.full_name AS manager_name,
+            d.full_name AS driver_name,
+            s.name AS status
+        FROM {schema}orders o
+        LEFT JOIN {schema}users c ON o.client_id = c.id
+        LEFT JOIN {schema}users m ON o.manager_id = m.id
+        LEFT JOIN {schema}users d ON o.driver_id = d.id
+        LEFT JOIN {schema}statuses s ON o.status_id = s.id
+        WHERE o.id = %s
+    """, (row[0],))
+    names = cur_dict.fetchone()
+    cur_dict.close()
+    conn_dict.close()
+    
+    cur.close()
+    conn.close()
+    
+    return {
+        "id": row[0],
+        "client_id": row[1],
+        "client_name": names["client_name"] if names else None,
+        "manager_id": row[2],
+        "manager_name": names["manager_name"] if names else None,
+        "driver_id": row[3],
+        "driver_name": names["driver_name"] if names else None,
+        "weight": row[4],
+        "status": names["status"] if names else None,
+        "pickup_address": row[6] if row[6] is not None else "",
+        "delivery_address": row[7] if row[7] is not None else "",
+        "created_at": row[8],
+        "updated_at": row[9]
+    }
+
+# -------- 7. НАЗНАЧЕНИЕ ВОДИТЕЛЯ --------
+@app.put("/order/{order_id}/assign", tags=["Orders"])
+async def assign_driver(order_id: int, request: dict):
+    schema = get_schema_prefix()
+    
+    driver_id = request.get("driver_id")
+    status_id = request.get("status_id")
+    
+    if driver_id is None:
+        raise HTTPException(status_code=400, detail="driver_id обязателен")
+    
+    conn_dict = get_db_connection_dict()
+    cur_dict = conn_dict.cursor()
+    cur_dict.execute(f"SELECT id FROM {schema}orders WHERE id = %s", (order_id,))
+    if not cur_dict.fetchone():
+        cur_dict.close()
+        conn_dict.close()
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    cur_dict.close()
+    conn_dict.close()
+    
+    if driver_id is not None:
+        conn_dict = get_db_connection_dict()
+        cur_dict = conn_dict.cursor()
+        cur_dict.execute(f"SELECT id FROM {schema}users WHERE id = %s AND role = 'driver'", (driver_id,))
+        if not cur_dict.fetchone():
+            cur_dict.close()
+            conn_dict.close()
+            raise HTTPException(status_code=404, detail="Водитель не найден")
+        cur_dict.close()
+        conn_dict.close()
+    
+    conn = get_db_connection()
+    cur = conn.cursor()
+    
+    if driver_id is None:
+        query = f"""
+            UPDATE {schema}orders 
+            SET driver_id = NULL, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            RETURNING id
+        """
+        cur.execute(query, (order_id,))
+    else:
+        query = f"""
+            UPDATE {schema}orders 
+            SET driver_id = %s, status_id = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE id = %s
+            RETURNING id
+        """
+        cur.execute(query, (driver_id, status_id, order_id))
+    
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    
+    if not row:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+    
+    return {"message": "Водитель назначен", "order_id": order_id, "driver_id": driver_id}
 
 # ============================================================
 # ЗАПУСК
 # ============================================================
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

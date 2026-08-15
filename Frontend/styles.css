@@ -122,7 +122,6 @@ tr:hover {
     font-size: 12px;
     font-weight: 500;
 }
-
 .status-Создана { background: #FBBC04; color: #202124; }
 .status-Назначена { background: #1A73E8; color: white; }
 .status-В_пути { background: #1A73E8; color: white; }
