@@ -14,7 +14,6 @@ app = FastAPI(
 # ============================================================
 # НАСТРОЙКА CORS
 # ============================================================
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -26,7 +25,6 @@ app.add_middleware(
 # ============================================================
 # МОДЕЛЬ ДЛЯ ЛОГИНА
 # ============================================================
-
 class LoginRequest(BaseModel):
     username: str
     password: str
@@ -34,7 +32,6 @@ class LoginRequest(BaseModel):
 # ============================================================
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ============================================================
-
 def get_schema_prefix():
     from database import get_schema
     schema = get_schema()
@@ -43,7 +40,6 @@ def get_schema_prefix():
 # ============================================================
 # ЭНДПОИНТЫ
 # ============================================================
-
 @app.get("/", tags=["System"])
 async def root():
     return {"message": "ТЛК-Портал API работает", "version": "2.0.0"}
@@ -54,7 +50,6 @@ async def login(request: LoginRequest):
     schema = get_schema_prefix()
     conn = get_db_connection_dict()
     cur = conn.cursor()
-    
     cur.execute(f"""
         SELECT id, username, full_name, role, password_hash
         FROM {schema}users
@@ -63,13 +58,10 @@ async def login(request: LoginRequest):
     user = cur.fetchone()
     cur.close()
     conn.close()
-    
     if not user:
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
-    
     if user["password_hash"] != request.password:
         raise HTTPException(status_code=401, detail="Неверный логин или пароль")
-    
     return {
         "id": user["id"],
         "username": user["username"],
@@ -83,7 +75,6 @@ async def get_users(role: Optional[str] = None):
     schema = get_schema_prefix()
     conn = get_db_connection_dict()
     cur = conn.cursor()
-    
     query = f"""
         SELECT id, username, full_name, role, phone, created_at
         FROM {schema}users
@@ -93,7 +84,6 @@ async def get_users(role: Optional[str] = None):
         cur.execute(query, (role,))
     else:
         cur.execute(query)
-    
     rows = cur.fetchall()
     cur.close()
     conn.close()
@@ -102,7 +92,7 @@ async def get_users(role: Optional[str] = None):
 # -------- 1. СПИСОК ВСЕХ ЗАЯВОК --------
 @app.get("/orders", response_model=List[OrderResponse], tags=["Orders"])
 async def get_orders(
-    limit: int = 20, 
+    limit: int = 20,
     offset: int = 0,
     role: Optional[str] = None,
     user_id: Optional[int] = None
@@ -110,7 +100,6 @@ async def get_orders(
     schema = get_schema_prefix()
     conn = get_db_connection_dict()
     cur = conn.cursor()
-    
     query = f"""
         SELECT 
             o.id,
@@ -118,6 +107,7 @@ async def get_orders(
             c.full_name AS client_name,
             o.manager_id,
             m.full_name AS manager_name,
+            m.phone AS manager_phone,
             o.driver_id,
             d.full_name AS driver_name,
             o.weight,
@@ -132,7 +122,6 @@ async def get_orders(
         LEFT JOIN {schema}users d ON o.driver_id = d.id
         LEFT JOIN {schema}statuses s ON o.status_id = s.id
     """
-    
     if role and user_id:
         role_field = {
             "client": "o.client_id",
@@ -146,14 +135,12 @@ async def get_orders(
             params = (limit, offset)
     else:
         params = (limit, offset)
-    
-    query += " ORDER BY o.created_at DESC LIMIT %s OFFSET %s"
-    
+    # ИЗМЕНЕНО: сортировка по дате статуса (updated_at) по убыванию
+    query += " ORDER BY o.updated_at DESC LIMIT %s OFFSET %s"
     cur.execute(query, params)
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    
     return rows
 
 # -------- 2. ДЕТАЛИ ЗАЯВКИ --------
@@ -162,7 +149,6 @@ async def get_order(order_id: int):
     schema = get_schema_prefix()
     conn = get_db_connection_dict()
     cur = conn.cursor()
-    
     query = f"""
         SELECT 
             o.id,
@@ -170,6 +156,7 @@ async def get_order(order_id: int):
             c.full_name AS client_name,
             o.manager_id,
             m.full_name AS manager_name,
+            m.phone AS manager_phone,
             o.driver_id,
             d.full_name AS driver_name,
             o.weight,
@@ -189,10 +176,8 @@ async def get_order(order_id: int):
     row = cur.fetchone()
     cur.close()
     conn.close()
-    
     if not row:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
-    
     return row
 
 # -------- 3. СПИСОК КЛИЕНТОВ --------
@@ -201,7 +186,6 @@ async def get_clients():
     schema = get_schema_prefix()
     conn = get_db_connection_dict()
     cur = conn.cursor()
-    
     query = f"""
         SELECT id, username, full_name, phone, created_at
         FROM {schema}users
@@ -212,7 +196,6 @@ async def get_clients():
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    
     return rows
 
 # -------- 4. СПИСОК СТАТУСОВ --------
@@ -221,7 +204,6 @@ async def get_statuses():
     schema = get_schema_prefix()
     conn = get_db_connection_dict()
     cur = conn.cursor()
-    
     query = f"""
         SELECT id, name, description
         FROM {schema}statuses
@@ -231,17 +213,14 @@ async def get_statuses():
     rows = cur.fetchall()
     cur.close()
     conn.close()
-    
     return rows
 
 # -------- 5. СОЗДАНИЕ ЗАЯВКИ --------
 @app.post("/orders", response_model=OrderResponse, status_code=201, tags=["Orders"])
 async def create_order(order: OrderCreate):
     schema = get_schema_prefix()
-    
     if order.weight <= 0:
         raise HTTPException(status_code=400, detail="Вес должен быть больше 0")
-    
     conn = get_db_connection_dict()
     cur = conn.cursor()
     cur.execute(f"SELECT id FROM {schema}users WHERE id = %s AND role = 'client'", (order.client_id,))
@@ -249,23 +228,20 @@ async def create_order(order: OrderCreate):
         cur.close()
         conn.close()
         raise HTTPException(status_code=404, detail="Клиент не найден")
-    
     cur.execute(f"SELECT id FROM {schema}users WHERE id = %s AND role = 'manager'", (order.manager_id,))
     if not cur.fetchone():
         cur.close()
         conn.close()
         raise HTTPException(status_code=404, detail="Менеджер не найден")
-    
     if order.driver_id:
         cur.execute(f"SELECT id FROM {schema}users WHERE id = %s AND role = 'driver'", (order.driver_id,))
         if not cur.fetchone():
             cur.close()
             conn.close()
             raise HTTPException(status_code=404, detail="Водитель не найден")
-    
     cur.close()
     conn.close()
-    
+
     conn = get_db_connection()
     cur = conn.cursor()
     query = f"""
@@ -275,22 +251,23 @@ async def create_order(order: OrderCreate):
         RETURNING id, client_id, manager_id, driver_id, weight, status_id, pickup_address, delivery_address, created_at, updated_at
     """
     cur.execute(query, (
-        order.client_id, 
-        order.manager_id, 
-        order.driver_id, 
-        order.weight, 
+        order.client_id,
+        order.manager_id,
+        order.driver_id,
+        order.weight,
         order.status_id,
         order.pickup_address,
         order.delivery_address
     ))
     row = cur.fetchone()
-    
+
     conn_dict = get_db_connection_dict()
     cur_dict = conn_dict.cursor()
     cur_dict.execute(f"""
         SELECT 
             c.full_name AS client_name,
             m.full_name AS manager_name,
+            m.phone AS manager_phone,
             d.full_name AS driver_name,
             s.name AS status
         FROM {schema}orders o
@@ -303,16 +280,16 @@ async def create_order(order: OrderCreate):
     names = cur_dict.fetchone()
     cur_dict.close()
     conn_dict.close()
-    
     cur.close()
     conn.close()
-    
+
     return {
         "id": row[0],
         "client_id": row[1],
         "client_name": names["client_name"] if names else None,
         "manager_id": row[2],
         "manager_name": names["manager_name"] if names else None,
+        "manager_phone": names["manager_phone"] if names else None,
         "driver_id": row[3],
         "driver_name": names["driver_name"] if names else None,
         "weight": row[4],
@@ -323,12 +300,10 @@ async def create_order(order: OrderCreate):
         "updated_at": row[9]
     }
 
-# -------- 6. ОБНОВЛЕНИЕ СТАТУСА (ИСПРАВЛЕННЫЙ) --------
+# -------- 6. ОБНОВЛЕНИЕ СТАТУСА --------
 @app.put("/order/{order_id}/status", response_model=OrderResponse, tags=["Orders"])
 async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
     schema = get_schema_prefix()
-    
-    # Проверяем существование заявки
     conn_dict = get_db_connection_dict()
     cur_dict = conn_dict.cursor()
     cur_dict.execute(f"SELECT id FROM {schema}orders WHERE id = %s", (order_id,))
@@ -338,8 +313,7 @@ async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
         raise HTTPException(status_code=404, detail="Заявка не найдена")
     cur_dict.close()
     conn_dict.close()
-    
-    # Проверяем существование статуса
+
     conn_dict = get_db_connection_dict()
     cur_dict = conn_dict.cursor()
     cur_dict.execute(f"SELECT id FROM {schema}statuses WHERE id = %s", (status_update.status_id,))
@@ -349,8 +323,7 @@ async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
         raise HTTPException(status_code=404, detail="Статус не найден")
     cur_dict.close()
     conn_dict.close()
-    
-    # Обновляем статус
+
     conn = get_db_connection()
     cur = conn.cursor()
     query = f"""
@@ -361,14 +334,14 @@ async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
     """
     cur.execute(query, (status_update.status_id, order_id))
     row = cur.fetchone()
-    
-    # Получаем имена
+
     conn_dict = get_db_connection_dict()
     cur_dict = conn_dict.cursor()
     cur_dict.execute(f"""
         SELECT 
             c.full_name AS client_name,
             m.full_name AS manager_name,
+            m.phone AS manager_phone,
             d.full_name AS driver_name,
             s.name AS status
         FROM {schema}orders o
@@ -381,16 +354,16 @@ async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
     names = cur_dict.fetchone()
     cur_dict.close()
     conn_dict.close()
-    
     cur.close()
     conn.close()
-    
+
     return {
         "id": row[0],
         "client_id": row[1],
         "client_name": names["client_name"] if names else None,
         "manager_id": row[2],
         "manager_name": names["manager_name"] if names else None,
+        "manager_phone": names["manager_phone"] if names else None,
         "driver_id": row[3],
         "driver_name": names["driver_name"] if names else None,
         "weight": row[4],
@@ -405,13 +378,10 @@ async def update_order_status(order_id: int, status_update: OrderUpdateStatus):
 @app.put("/order/{order_id}/assign", tags=["Orders"])
 async def assign_driver(order_id: int, request: dict):
     schema = get_schema_prefix()
-    
     driver_id = request.get("driver_id")
     status_id = request.get("status_id")
-    
     if driver_id is None:
         raise HTTPException(status_code=400, detail="driver_id обязателен")
-    
     conn_dict = get_db_connection_dict()
     cur_dict = conn_dict.cursor()
     cur_dict.execute(f"SELECT id FROM {schema}orders WHERE id = %s", (order_id,))
@@ -421,7 +391,7 @@ async def assign_driver(order_id: int, request: dict):
         raise HTTPException(status_code=404, detail="Заявка не найдена")
     cur_dict.close()
     conn_dict.close()
-    
+
     if driver_id is not None:
         conn_dict = get_db_connection_dict()
         cur_dict = conn_dict.cursor()
@@ -432,10 +402,9 @@ async def assign_driver(order_id: int, request: dict):
             raise HTTPException(status_code=404, detail="Водитель не найден")
         cur_dict.close()
         conn_dict.close()
-    
+
     conn = get_db_connection()
     cur = conn.cursor()
-    
     if driver_id is None:
         query = f"""
             UPDATE {schema}orders 
@@ -452,20 +421,16 @@ async def assign_driver(order_id: int, request: dict):
             RETURNING id
         """
         cur.execute(query, (driver_id, status_id, order_id))
-    
     row = cur.fetchone()
     cur.close()
     conn.close()
-    
     if not row:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
-    
     return {"message": "Водитель назначен", "order_id": order_id, "driver_id": driver_id}
 
 # ============================================================
 # ЗАПУСК
 # ============================================================
-
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

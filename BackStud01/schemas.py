@@ -20,6 +20,7 @@ class OrderResponse(BaseModel):
     client_name: Optional[str] = None
     manager_id: int
     manager_name: Optional[str] = None
+    manager_phone: Optional[str] = None   # добавлено
     driver_id: Optional[int] = None
     driver_name: Optional[str] = None
     weight: float
