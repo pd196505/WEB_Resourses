@@ -60,4 +60,5 @@ CREATE INDEX idx_orders_client_id ON orders(client_id);
 CREATE INDEX idx_orders_manager_id ON orders(manager_id);
 CREATE INDEX idx_orders_driver_id ON orders(driver_id);
 CREATE INDEX idx_orders_status_id ON orders(status_id);
+CREATE INDEX idx_orders_created_at ON orders(created_at);
 CREATE INDEX idx_documents_order_id ON documents(order_id);

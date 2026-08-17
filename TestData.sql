@@ -8,7 +8,8 @@ INSERT INTO statuses (name, description) VALUES
     ('Назначена', 'Водитель назначен'),
     ('В пути', 'Груз в пути'),
     ('Доставлена', 'Груз доставлен'),
-    ('Отменена', 'Заявка отменена')
+    ('Отменена', 'Заявка отменена'),
+    ('Получена', 'Заявка получена клиентом')
 ON CONFLICT (id) DO NOTHING;
 
 -- 2. Пользователи (10 клиентов, 3 менеджера, 5 водителей)
@@ -45,7 +46,7 @@ SELECT
     (random() * 2 + 11)::int AS manager_id,  -- 11, 12, 13
     CASE WHEN random() > 0.2 THEN (random() * 4 + 14)::int ELSE NULL END AS driver_id, -- 14, 15, 16, 17, 18
     (random() * 5000 + 100)::numeric(10,2) AS weight,
-    (random() * 4 + 1)::int AS status_id,
+    (random() * 5 + 1)::int AS status_id,   -- 1..6 (включая Получена)
     (ARRAY[
         'Москва, Тверская, 1',
         'Москва, Арбат, 15',
