@@ -1,19 +1,19 @@
 // ============================================================
 // ГЛОБАЛЬНОЕ СОСТОЯНИЕ И ОБЩИЕ ФУНКЦИИ
 // ============================================================
-
-const state = { 
-    currentPage: 'main', 
-    user: null, 
-    orders: [], 
-    filteredOrders: [], 
-    clients: [], 
-    statuses: [], 
-    managers: [],
+const state = {  
+    currentPage: 'main',  
+    user: null,  
+    orders: [],  
+    filteredOrders: [],  
+    clients: [],  
+    statuses: [],  
+    managers: [], 
     drivers: [],
     statusFilter: null,
     driverFilter: null
 };
+
 const API_URL = 'http://localhost:8000';
 
 function getStatusLabel(status) { return status; }
@@ -53,6 +53,10 @@ async function loadOrders() {
     try {
         const url = `/orders?role=${state.user.role}&user_id=${state.user.id}`;
         state.orders = await apiFetch(url);
+        if (state.user.role === 'driver') {
+            const allowedStatuses = ['Назначена', 'В пути', 'Доставлена'];
+            state.orders = state.orders.filter(o => allowedStatuses.includes(o.status));
+        }
         state.filteredOrders = [...state.orders];
         console.log('Загруженные заявки:', state.orders);
     } catch (error) {
@@ -139,9 +143,177 @@ function getUniqueDrivers() {
 }
 
 // ============================================================
+// КАРТА САЙТА
+// ============================================================
+function showSitemap() {
+    const existingModal = document.getElementById('sitemap-modal');
+    if (existingModal) {
+        existingModal.remove();
+        return;
+    }
+
+    const modal = document.createElement('div');
+    modal.id = 'sitemap-modal';
+    modal.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        font-family: 'Inter', sans-serif;
+    `;
+
+    const content = document.createElement('div');
+    content.style.cssText = `
+        background: white;
+        border-radius: 16px;
+        padding: 30px 40px;
+        max-width: 600px;
+        width: 90%;
+        max-height: 80vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        position: relative;
+    `;
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = `
+        position: absolute;
+        top: 12px;
+        right: 16px;
+        background: none;
+        border: none;
+        font-size: 24px;
+        cursor: pointer;
+        color: #5F6368;
+    `;
+    closeBtn.onclick = () => modal.remove();
+
+    const title = document.createElement('h2');
+    title.textContent = '🗺️ Карта сайта';
+    title.style.cssText = `
+        margin-top: 0;
+        color: #202124;
+        font-weight: 700;
+        font-size: 24px;
+    `;
+
+    const tree = document.createElement('ul');
+    tree.style.cssText = `
+        list-style: none;
+        padding-left: 0;
+        font-size: 16px;
+        line-height: 2;
+    `;
+
+    // Структура страниц с указанием роли для перехода
+    const pages = [
+        { name: 'Главная', link: 'main' },
+        { name: 'Вход в систему', link: 'login' },
+        { name: 'Личный кабинет клиента', link: 'lkk', role: 'client', children: [
+            { name: 'Создание заявки', link: 'create-order', role: 'client' }
+        ]},
+        { name: 'Личный кабинет менеджера', link: 'lkm', role: 'manager' },
+        { name: 'Личный кабинет водителя', link: 'lkv', role: 'driver' },
+        { name: 'Контакты', link: 'contacts' },
+        { name: 'О компании', link: 'about' }
+    ];
+
+    function buildTree(items, level = 0) {
+        let html = '';
+        items.forEach(item => {
+            const indent = level * 20;
+            // Определяем, какой обработчик вызывать
+            let clickHandler = '';
+            if (item.link === 'main') {
+                clickHandler = `navigate('main'); document.getElementById('sitemap-modal').remove();`;
+            } else if (item.link === 'login') {
+                clickHandler = `navigate('login'); document.getElementById('sitemap-modal').remove();`;
+            } else if (item.link === 'contacts' || item.link === 'about') {
+                clickHandler = `navigate('${item.link}'); document.getElementById('sitemap-modal').remove();`;
+            } else if (item.link === 'create-order') {
+                clickHandler = `navigateCreateOrder(); document.getElementById('sitemap-modal').remove();`;
+            } else {
+                // Для ЛК используем функцию с проверкой роли
+                const role = item.role || 'client';
+                clickHandler = `navigateWithRole('${item.link}', '${role}'); document.getElementById('sitemap-modal').remove();`;
+            }
+            html += `<li style="padding-left:${indent}px; cursor:pointer;" onclick="${clickHandler}">
+                ${item.name}
+            </li>`;
+            if (item.children && item.children.length) {
+                html += `<ul style="list-style:none; padding-left:0;">`;
+                html += buildTree(item.children, level + 1);
+                html += `</ul>`;
+            }
+        });
+        return html;
+    }
+
+    tree.innerHTML = buildTree(pages);
+
+    content.appendChild(closeBtn);
+    content.appendChild(title);
+    content.appendChild(tree);
+    modal.appendChild(content);
+    document.body.appendChild(modal);
+
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+}
+
+// ============================================================
+// НАВИГАЦИЯ С ПРОВЕРКОЙ РОЛИ
+// ============================================================
+function navigateWithRole(target, requiredRole) {
+    // Если пользователь не залогинен или его роль не совпадает
+    if (!state.user || state.user.role !== requiredRole) {
+        // Сбрасываем пользователя, если он есть, но роль другая
+        if (state.user) {
+            state.user = null;
+            state.orders = [];
+            state.filteredOrders = [];
+        }
+        // Переходим на форму входа с указанием роли
+        navigate('login', requiredRole);
+        return;
+    }
+    // Иначе переходим в нужный ЛК
+    navigate(target);
+}
+
+function navigateCreateOrder() {
+    if (!state.user || state.user.role !== 'client') {
+        if (state.user) {
+            state.user = null;
+            state.orders = [];
+            state.filteredOrders = [];
+        }
+        navigate('login', 'client');
+        return;
+    }
+    navigate('create-order');
+}
+
+function handleLogoClick(e) {
+    e.preventDefault();
+    if (state.currentPage === 'main') {
+        showSitemap();
+    } else {
+        navigate('main');
+    }
+}
+
+// ============================================================
 // КОНТЕКСТНОЕ МЕНЮ (СТАТУС)
 // ============================================================
-
 function showContextMenu(e, status) {
     e.preventDefault();
     const menu = document.getElementById('context-menu');
@@ -182,7 +354,6 @@ function showContextMenu(e, status) {
 // ============================================================
 // КОНТЕКСТНОЕ МЕНЮ (ВОДИТЕЛЬ — ФИЛЬТР)
 // ============================================================
-
 function showDriverContextMenu(e, driver) {
     e.preventDefault();
     const menu = document.getElementById('context-menu');
@@ -223,7 +394,6 @@ function showDriverContextMenu(e, driver) {
 // ============================================================
 // КОНТЕКСТНОЕ МЕНЮ (ВОДИТЕЛЬ — ВЫБОР)
 // ============================================================
-
 function showDriverSelectionMenu(e, orderId, currentDriver) {
     e.preventDefault();
     const menu = document.getElementById('context-menu');
@@ -231,23 +401,19 @@ function showDriverSelectionMenu(e, orderId, currentDriver) {
         alert('Список водителей не загружен');
         return;
     }
-
     let x = e.clientX || window.innerWidth / 2 - 100;
     let y = e.clientY || window.innerHeight / 2 - 100;
-    
     menu.style.left = x + 'px';
     menu.style.top = y + 'px';
     menu.style.display = 'block';
     menu.innerHTML = '';
-
     const header = document.createElement('div');
     header.className = 'context-item';
-    header.textContent = '👨‍✈️ Выберите водителя';
+    header.textContent = '👨✈️ Выберите водителя';
     header.style.fontWeight = 'bold';
     header.style.borderBottom = '1px solid #e0e0e0';
     header.style.cursor = 'default';
     menu.appendChild(header);
-
     if (currentDriver && currentDriver !== '') {
         const currentItem = document.createElement('div');
         currentItem.className = 'context-item';
@@ -256,7 +422,6 @@ function showDriverSelectionMenu(e, orderId, currentDriver) {
         currentItem.style.cursor = 'default';
         menu.appendChild(currentItem);
     }
-
     state.drivers.forEach(function(d) {
         const item = document.createElement('div');
         item.className = 'context-item';
@@ -272,7 +437,6 @@ function showDriverSelectionMenu(e, orderId, currentDriver) {
         };
         menu.appendChild(item);
     });
-
     if (currentDriver && currentDriver !== '') {
         const removeItem = document.createElement('div');
         removeItem.className = 'context-item';
@@ -294,28 +458,23 @@ async function assignDriver(orderId, driverId) {
             alert('Заявка не найдена');
             return;
         }
-
-        // Проверка статуса
         const allowedStatuses = ['Создана', 'Назначена'];
         if (!allowedStatuses.includes(order.status)) {
             alert('❌ Нельзя назначить водителя. Статус заявки должен быть "Создана" или "Назначена".');
             return;
         }
-
         const assignedStatus = state.statuses.find(s => s.name === 'Назначена');
         if (!assignedStatus) {
             alert('Статус "Назначена" не найден');
             return;
         }
-
         await apiFetch(`/order/${orderId}/assign`, {
             method: 'PUT',
             body: JSON.stringify({ 
                 driver_id: driverId,
-                status_id: assignedStatus.id 
+                status_id: assignedStatus.id  
             }),
         });
-
         alert('✅ Водитель назначен!');
         await loadOrders();
         resetFilters();
@@ -329,7 +488,6 @@ async function assignDriver(orderId, driverId) {
 // ============================================================
 // СОЗДАНИЕ ЗАЯВКИ
 // ============================================================
-
 async function createOrder(pickupAddress, deliveryAddress, weight) {
     if (!state.user) {
         alert('Пользователь не авторизован');
@@ -382,20 +540,19 @@ async function updateOrderStatus(orderId, statusId) {
         alert('✅ Статус обновлён');
         await loadOrders();
         resetFilters();
-        navigate('lkm');
+        renderCurrentPage();
     } catch (error) {
         alert('❌ Ошибка обновления статуса: ' + error.message);
     }
 }
 
 // ============================================================
-// ОТРИСОВКА СТРАНИЦ (КРОМЕ ЛКК, ЛКМ, ЛКВ)
+// ОТРИСОВКА СТРАНИЦ
 // ============================================================
-
 function renderMain() {
     document.getElementById('app').innerHTML = `
         <div class="header">
-            <div class="logo" onclick="navigate('main')">ТЛК Портал</div>
+            <div class="logo" onclick="handleLogoClick(event)">ТЛК Портал</div>
             <div></div>
         </div>
         <div style="text-align:center;padding:20px 0 0 0;">
@@ -403,9 +560,9 @@ function renderMain() {
             <p style="color:#5F6368;font-size:18px;margin-top:8px;">Личный кабинет для клиентов и партнёров</p>
         </div>
         <div class="main-grid">
-            <div class="main-card" onclick="navigate('login','client')"><h3>👤 Личный кабинет клиента</h3><p>Оформляйте заявки</p></div>
-            <div class="main-card" onclick="navigate('login','manager')"><h3>📋 Панель менеджера</h3><p>Управляйте всеми заявками</p></div>
-            <div class="main-card" onclick="navigate('login','driver')"><h3>🚛 Личный кабинет водителя</h3><p>Отслеживайте рейсы</p></div>
+            <div class="main-card" onclick="navigateWithRole('lkk', 'client')"><h3>👤 Личный кабинет клиента</h3><p>Оформляйте заявки</p></div>
+            <div class="main-card" onclick="navigateWithRole('lkm', 'manager')"><h3>📋 Панель менеджера</h3><p>Управляйте всеми заявками</p></div>
+            <div class="main-card" onclick="navigateWithRole('lkv', 'driver')"><h3>🚛 Личный кабинет водителя</h3><p>Отслеживайте рейсы</p></div>
             <div class="main-card" onclick="navigate('contacts')"><h3>📞 Контакты</h3><p>Свяжитесь с нами</p></div>
             <div class="main-card" onclick="navigate('about')"><h3>ℹ️ О компании</h3><p>Узнайте о нас</p></div>
         </div>
@@ -413,27 +570,35 @@ function renderMain() {
 }
 
 function renderLogin(role) {
+    const roleValue = role || '';
     document.getElementById('app').innerHTML = `
         <div class="header">
-            <div class="logo" onclick="navigate('main')">ТЛК Портал</div>
+            <div class="logo" onclick="handleLogoClick(event)">ТЛК Портал</div>
             <div></div>
         </div>
         <div class="form-container" style="margin:40px auto;max-width:400px;">
             <h2 style="font-size:28px;font-weight:700;margin-bottom:8px;">Вход в систему</h2>
-            <p style="color:#5F6368;margin-bottom:24px;">Роль: ${role}</p>
+            <p style="color:#5F6368;margin-bottom:24px;">Введите учётные данные</p>
+            <div class="form-group">
+                <label>Роль</label>
+                <input type="text" id="login-role" placeholder="client / manager / driver" value="${roleValue}">
+            </div>
             <div class="form-group"><label>Логин</label><input type="text" id="login-username" placeholder="Введите логин" value=""></div>
             <div class="form-group"><label>Пароль</label><input type="password" id="login-password" placeholder="Введите пароль" value=""></div>
-            <button class="btn-primary" style="width:100%;" onclick="handleLogin('${role}')">Войти</button>
-            <div style="margin-top:16px;text-align:center;font-size:14px;color:#5F6368;">Введите логин и пароль</div>
+            <button class="btn-primary" style="width:100%;" onclick="handleLogin()">Войти</button>
+            <div style="margin-top:16px;text-align:center;font-size:14px;color:#5F6368;">
+                Примеры: client1/123, manager1/123, driver1/123
+            </div>
         </div>
     `;
 }
 
-async function handleLogin(role) {
-    const username = document.getElementById('login-username').value;
-    const password = document.getElementById('login-password').value;
-    if (!username || !password) {
-        alert('Введите логин и пароль');
+async function handleLogin() {
+    const role = document.getElementById('login-role').value.trim();
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value.trim();
+    if (!role || !username || !password) {
+        alert('Заполните все поля');
         return;
     }
     try {
@@ -447,6 +612,10 @@ async function handleLogin(role) {
         if (role === 'client') navigate('lkk');
         else if (role === 'manager') navigate('lkm');
         else if (role === 'driver') navigate('lkv');
+        else {
+            alert('Неизвестная роль. Войдите как client, manager или driver.');
+            navigate('main');
+        }
     } catch (error) {
         alert('❌ Ошибка входа: ' + error.message);
     }
@@ -457,11 +626,10 @@ function navigate(page, param = null) {
     const pages = {
         main: renderMain,
         login: () => renderLogin(param),
-        lkk: renderLKK,   // из lkk.js
-        lkm: renderLKM,   // из lkm.js
-        lkv: renderLKV,   // из lkv.js
+        lkk: renderLKK,
+        lkm: renderLKM,
+        lkv: renderLKV,
         'create-order': renderCreateOrder,
-        'edit-order': () => renderEditOrder(param),
         contacts: renderContacts,
         about: renderAbout
     };
@@ -476,16 +644,18 @@ function renderCurrentPage() {
 }
 
 // ============================================================
-// СОЗДАНИЕ ЗАЯВКИ
+// СОЗДАНИЕ ЗАЯВКИ (страница)
 // ============================================================
-
 function renderCreateOrder() {
+    if (!state.user || state.user.role !== 'client') {
+        navigate('login', 'client');
+        return;
+    }
     document.getElementById('app').innerHTML = `
         <div class="header">
-            <div class="logo" onclick="navigate('main')">ТЛК Портал</div>
+            <div class="logo" onclick="handleLogoClick(event)">ТЛК Портал</div>
             <div class="user-info">
-                <span class="name">${state.user.full_name}</span>
-                <span class="back-btn" onclick="navigate('lkk')" style="cursor:pointer; font-size:20px; margin-left:15px;">←</span>
+                <span class="name">${escapeHtml(state.user.full_name)}</span>
             </div>
         </div>
         <h1 class="page-title">Новая заявка</h1>
@@ -522,50 +692,14 @@ async function handleCreateOrder() {
 }
 
 // ============================================================
-// РЕДАКТИРОВАНИЕ ЗАЯВКИ
-// ============================================================
-
-function renderEditOrder(orderId) {
-    const order = state.orders.find(o => o.id === orderId);
-    if (!order) {
-        document.getElementById('app').innerHTML = '<div style="padding:40px;">Заявка не найдена</div>';
-        return;
-    }
-    let options = state.statuses.map(s =>
-        `<option value="${s.id}" ${s.name === order.status ? 'selected' : ''}>${s.name}</option>`
-    ).join('');
-    document.getElementById('app').innerHTML = `
-        <div class="header">
-            <div class="logo" onclick="navigate('main')">ТЛК Портал</div>
-            <div class="user-info">
-                <span class="name">${state.user.full_name}</span>
-                <span class="back-btn" onclick="navigate('lkm')" style="cursor:pointer; font-size:20px; margin-left:15px;">←</span>
-            </div>
-        </div>
-        <h1 class="page-title">Редактирование заявки №${orderId}</h1>
-        <div class="form-container">
-            <div class="form-group"><label>Статус</label><select id="edit-status">${options}</select></div>
-            <button class="btn-primary" onclick="handleUpdateStatus(${orderId})">Сохранить статус</button>
-        </div>
-    `;
-}
-
-async function handleUpdateStatus(orderId) {
-    const statusId = parseInt(document.getElementById('edit-status').value);
-    await updateOrderStatus(orderId, statusId);
-}
-
-// ============================================================
 // КОНТАКТЫ И О КОМПАНИИ
 // ============================================================
-
 function renderContacts() {
     document.getElementById('app').innerHTML = `
         <div class="header">
-            <div class="logo" onclick="navigate('main')">ТЛК Портал</div>
+            <div class="logo" onclick="handleLogoClick(event)">ТЛК Портал</div>
             <div></div>
         </div>
-        <a class="back-link" onclick="navigate('main')">← На главную</a>
         <h1 class="page-title">Контакты</h1>
         <div style="padding:20px 40px;font-size:18px;">
             <p>📞 Телефон: +7 (495) 123-45-67</p>
@@ -578,10 +712,9 @@ function renderContacts() {
 function renderAbout() {
     document.getElementById('app').innerHTML = `
         <div class="header">
-            <div class="logo" onclick="navigate('main')">ТЛК Портал</div>
+            <div class="logo" onclick="handleLogoClick(event)">ТЛК Портал</div>
             <div></div>
         </div>
-        <a class="back-link" onclick="navigate('main')">← На главную</a>
         <h1 class="page-title">О компании</h1>
         <div style="padding:20px 40px;font-size:16px;max-width:800px;line-height:1.6;">
             <p>ООО «ТрансЛогистик» — российская транспортная компания, осуществляющая грузовые автомобильные перевозки по территории Российской Федерации.</p>
@@ -597,9 +730,23 @@ function renderAbout() {
 }
 
 // ============================================================
+// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ЭКРАНИРОВАНИЯ
+// ============================================================
+function escapeHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/[&<>"']/g, function(m) {
+        if (m === '&') return '&amp;';
+        if (m === '<') return '&lt;';
+        if (m === '>') return '&gt;';
+        if (m === '"') return '&quot;';
+        if (m === "'") return '&#039;';
+        return m;
+    });
+}
+
+// ============================================================
 // КОНТЕКСТНОЕ МЕНЮ (HTML)
 // ============================================================
-
 const contextMenu = document.createElement('div');
 contextMenu.id = 'context-menu';
 contextMenu.style.cssText = `
@@ -647,16 +794,19 @@ document.addEventListener('contextmenu', (e) => {
 // ============================================================
 // ДЕЛАЕМ ФУНКЦИИ ГЛОБАЛЬНЫМИ
 // ============================================================
-
 window.showDriverSelectionMenu = showDriverSelectionMenu;
 window.assignDriver = assignDriver;
 window.filterOrdersByStatus = filterOrdersByStatus;
 window.filterOrdersByDriver = filterOrdersByDriver;
 window.showContextMenu = showContextMenu;
 window.showDriverContextMenu = showDriverContextMenu;
+window.handleLogoClick = handleLogoClick;
+window.showSitemap = showSitemap;
+window.handleLogin = handleLogin;
+window.navigateWithRole = navigateWithRole;
+window.navigateCreateOrder = navigateCreateOrder;
 
 // ============================================================
 // ЗАПУСК
 // ============================================================
-
 navigate('main');
