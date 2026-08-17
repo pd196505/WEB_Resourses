@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ТЛК Портал - Прототип</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-hover: #1d4ed8;
+            --bg-body: #f3f4f6;
+            --bg-card: #ffffff;
+            --text-main: #1f2937;
+            --text-secondary: #6b7280;
+            --border: #e5e7eb;
+            
+            /* Status Colors */
+            --status-new-bg: #e5e7eb; --status-new-text: #374151;
+            --status-assigned-bg: #dbeafe; --status-assigned-text: #1e40af;
+            --status-transit-bg: #fef3c7; --status-transit-text: #92400e;
+            --status-delivered-bg: #d1fae5; --status-delivered-text: #065f46;
+            --status-cancelled-bg: #fee2e2; --status-cancelled-text: #991b1b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        
+        body { background-color: var(--bg-body); color: var(--text-main); min-height: 100vh; display: flex; flex-direction: column; }
+
+        /* --- Header --- */
+        header {
+            background: var(--bg-card);
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            position: sticky; top: 0; z-index: 50;
+        }
+        .logo { font-weight: 800; font-size: 20px; color: var(--primary); cursor: pointer; display: flex; align-items: center; gap: 8px; text-decoration: none;}
+        .logo span { color: var(--text-main); }
+        .user-name { font-weight: 500; font-size: 14px; }
+
+        /* --- Layout & Containers --- */
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; width: 100%; }
+        .page { display: none; animation: fadeIn 0.3s ease; }
+        .page.active { display: block; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        h1 { font-size: 24px; margin-bottom: 24px; font-weight: 700; }
+        h2 { font-size: 20px; margin-bottom: 16px; font-weight: 600; }
+
+        /* --- Buttons & Inputs --- */
+        .btn {
+            display: inline-flex; align-items: center; justify-content: center;
+            padding: 10px 20px; border-radius: 8px; font-weight: 500; cursor: pointer;
+            transition: all 0.2s; border: none; font-size: 14px; text-decoration: none;
+        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-hover); }
+        .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+        
+        input {
+            width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+            font-size: 14px; outline: none; transition: border-color 0.2s;
+        }
+        input:focus { border-color: var(--primary); }
+
+        /* --- Cards Grid (Home) --- */
+        .hero { text-align: center; margin-bottom: 40px; }
+        .hero h1 { font-size: 32px; margin-bottom: 8px; }
+        .hero p { color: var(--text-secondary); font-size: 16px; }
+        
+        .grid-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
+        .card {
+            background: var(--bg-card); padding: 24px; border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align: center;
+            cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; border: 1px solid transparent;
+        }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); border-color: var(--primary); }
+        .card-icon { font-size: 32px; margin-bottom: 16px; display: block; }
+        .card-title { font-weight: 600; margin-bottom: 8px; font-size: 16px; }
+        .card-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+
+        /* --- Login Form --- */
+        .login-wrapper { max-width: 400px; margin: 60px auto; background: var(--bg-card); padding: 32px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; margin-bottom: 6px; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+        .hint { font-size: 12px; color: var(--text-secondary); margin-top: 16px; text-align: center; background: #f9fafb; padding: 8px; border-radius: 6px; }
+
+        /* --- Tables --- */
+        .table-container { background: var(--bg-card); border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); overflow: hidden; }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th { background: #f9fafb; padding: 12px 16px; font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); cursor: pointer; user-select: none;}
+        td { padding: 16px; border-bottom: 1px solid var(--border); font-size: 14px; vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: #f9fafb; }
+        
+        .badge {
+            display: inline-block; padding: 4px 10px; border-radius: 99px; font-size: 12px; font-weight: 600;
+            cursor: pointer; user-select: none;
+        }
+        .badge.new { background: var(--status-new-bg); color: var(--status-new-text); }
+        .badge.assigned { background: var(--status-assigned-bg); color: var(--status-assigned-text); }
+        .badge.transit { background: var(--status-transit-bg); color: var(--status-transit-text); }
+        .badge.delivered { background: var(--status-delivered-bg); color: var(--status-delivered-text); }
+        .badge.cancelled { background: var(--status-cancelled-bg); color: var(--status-cancelled-text); }
+
+        .link-text { color: var(--primary); cursor: pointer; text-decoration: underline; text-decoration-style: dotted; }
+        .empty-state { padding: 40px; text-align: center; color: var(--text-secondary); }
+
+        /* --- Create Order Form --- */
+        .address-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px; }
+        .address-block { background: var(--bg-card); padding: 20px; border-radius: 8px; border: 1px solid var(--border); }
+        .address-title { font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+
+        /* --- Context Menu --- */
+        .context-menu {
+            position: absolute; background: white; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+            border: 1px solid var(--border); min-width: 180px; z-index: 100; display: none; padding: 4px;
+        }
+        .ctx-item {
+            padding: 8px 12px; font-size: 13px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 8px;
+        }
+        .ctx-item:hover { background: #f3f4f6; }
+        .ctx-divider { height: 1px; background: var(--border); margin: 4px 0; }
+        .ctx-header { font-weight: 600; padding: 8px 12px; font-size: 12px; color: var(--text-secondary); border-bottom: 1px solid var(--border); margin-bottom: 4px; }
+        .ctx-active { background: #eff6ff; color: var(--primary); font-weight: 500; }
+        .ctx-danger { color: #dc2626; }
+
+        /* --- Modal (Sitemap) --- */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5);
+            display: none; align-items: center; justify-content: center; z-index: 200; backdrop-filter: blur(2px);
+        }
+        .modal { background: white; width: 400px; border-radius: 12px; padding: 24px; position: relative; }
+        .modal-close { position: absolute; top: 16px; right: 16px; cursor: pointer; color: var(--text-secondary); font-size: 20px; }
+        .sitemap-list { list-style: none; margin-top: 16px; }
+        .sitemap-list li { padding: 8px 0; border-bottom: 1px solid #f3f4f6; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 14px;}
+        .sitemap-list li:hover { color: var(--primary); }
+        .sitemap-sub { padding-left: 24px; font-size: 13px; color: var(--text-secondary); }
+
+        /* --- Info Pages --- */
+        .info-card { background: white; padding: 40px; border-radius: 12px; max-width: 800px; margin: 0 auto; }
+        .contact-row { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; font-size: 16px; }
+        .contact-icon { width: 40px; height: 40px; background: #eff6ff; color: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 32px; }
+        .stat-box { text-align: center; padding: 20px; background: #f9fafb; border-radius: 8px; }
+        .stat-num { font-size: 32px; font-weight: 800; color: var(--primary); display: block; }
+        .stat-label { font-size: 14px; color: var(--text-secondary); margin-top: 4px; }
+
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="logo" onclick="handleLogoClick()">
+            ТЛК <span>Портал</span>
+        </div>
+        <div id="header-user" class="user-name" style="display:none;"></div>
+    </header>
+
+    <!-- 2.1 Главная страница -->
+    <div id="page-home" class="page active container">
+        <div class="hero">
+            <h1>Транспортно-логистический портал</h1>
+            <p>Единая платформа для управления перевозками</p>
+        </div>
+        <div class="grid-cards">
+            <div class="card" onclick="navTo('login', 'client')">
+                <span class="card-icon"></span>
+                <div class="card-title">Личный кабинет клиента</div>
+                <div class="card-desc">Оформляйте заявки и отслеживайте грузы</div>
+            </div>
+            <div class="card" onclick="navTo('login', 'manager')">
+                <span class="card-icon">📋</span>
+                <div class="card-title">Панель менеджера</div>
+                <div class="card-desc">Управляйте всеми заявками и водителями</div>
+            </div>
+            <div class="card" onclick="navTo('login', 'driver')">
+                <span class="card-icon">🚛</span>
+                <div class="card-title">Личный кабинет водителя</div>
+                <div class="card-desc">Отслеживайте рейсы и статусы</div>
+            </div>
+            <div class="card" onclick="navTo('contacts')">
+                <span class="card-icon"></span>
+                <div class="card-title">Контакты</div>
+                <div class="card-desc">Свяжитесь с нами любым удобным способом</div>
+            </div>
+            <div class="card" onclick="navTo('about')">
+                <span class="card-icon">ℹ️</span>
+                <div class="card-title">О компании</div>
+                <div class="card-desc">Узнайте о нашей структуре и истории</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2.2 Страница входа -->
+    <div id="page-login" class="page container">
+        <div class="login-wrapper">
+            <h2 style="text-align:center; margin-bottom:24px;">Вход в систему</h2>
+            <div class="form-group">
+                <label class="form-label">Роль</label>
+                <input type="text" id="login-role" placeholder="client / manager / driver">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Логин</label>
+                <input type="text" id="login-user" placeholder="Например: client1">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Пароль</label>
+                <input type="password" value="123">
+            </div>
+            <button class="btn btn-primary" style="width:100%" onclick="performLogin()">Войти</button>
+            <div class="hint">Примеры: client1/123, manager1/123, driver1/123</div>
+        </div>
+    </div>
+
+    <!-- 2.3 Личный кабинет клиента -->
+    <div id="page-lkk" class="page container">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px;">
+            <h1>Мои заявки</h1>
+            <button class="btn btn-primary" onclick="navTo('create-order')">+ Создать заявку</button>
+        </div>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>№</th>
+                        <th>Дата</th>
+                        <th>Вес (кг)</th>
+                        <th onclick="resetFilter('lkk')">Статус ↕</th>
+                        <th>Дата статуса</th>
+                        <th>Адрес отправления</th>
+                        <th>Адрес доставки</th>
+                        <th>Менеджер</th>
+                    </tr>
+                </thead>
+                <tbody id="table-lkk">
+                    <!-- JS Render -->
+                </tbody>
+            </table>
+            <div id="empty-lkk" class="empty-state" style="display:none">Нет заявок</div>
+        </div>
+    </div>
+
+    <!-- 2.4 Панель менеджера -->
+    <div id="page-lkm" class="page container">
+        <h1>Все заявки</h1>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>№</th>
+                        <th>Дата</th>
+                        <th>Клиент</th>
+                        <th onclick="resetFilter('lkm')">Водитель </th>
+                        <th onclick="resetFilter('lkm')">Статус ↕</th>
+                        <th>Дата статуса</th>
+                        <th>Адрес отправления</th>
+                        <th>Адрес доставки</th>
+                    </tr>
+                </thead>
+                <tbody id="table-lkm">
+                    <!-- JS Render -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 2.5 Личный кабинет водителя -->
+    <div id="page-lkv" class="page container">
+        <h1>Мои рейсы</h1>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>№</th>
+                        <th>Дата</th>
+                        <th>Клиент</th>
+                        <th>Менеджер</th>
+                        <th onclick="resetFilter('lkv')">Статус ↕</th>
+                        <th>Дата статуса</th>
+                        <th>Адрес отправления</th>
+                        <th>Адрес доставки</th>
+                    </tr>
+                </thead>
+                <tbody id="table-lkv">
+                    <!-- JS Render -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- 2.6 Создание заявки -->
+    <div id="page-create-order" class="page container">
+        <h1>Новая заявка</h1>
+        <div class="address-grid">
+            <div class="address-block">
+                <div class="address-title">📍 Адрес отправления</div>
+                <div class="form-group"><input type="text" placeholder="Город"></div>
+                <div class="form-group"><input type="text" placeholder="Улица"></div>
+                <div class="form-group"><input type="text" placeholder="Дом"></div>
+            </div>
+            <div class="address-block">
+                <div class="address-title">📍 Адрес доставки</div>
+                <div class="form-group"><input type="text" placeholder="Город"></div>
+                <div class="form-group"><input type="text" placeholder="Улица"></div>
+                <div class="form-group"><input type="text" placeholder="Дом"></div>
+            </div>
+        </div>
+        <div class="form-group" style="max-width: 200px;">
+            <label class="form-label">Вес (кг)</label>
+            <input type="number" placeholder="0">
+        </div>
+        <button class="btn btn-primary" onclick="submitOrder()">Создать заявку</button>
+    </div>
+
+    <!-- 2.7 Контакты -->
+    <div id="page-contacts" class="page container">
+        <div class="info-card">
+            <h1>Контакты</h1>
+            <div class="contact-row">
+                <div class="contact-icon">📞</div>
+                <div><strong>Телефон:</strong><br>+7 (495) 123-45-67</div>
+            </div>
+            <div class="contact-row">
+                <div class="contact-icon">✉️</div>
+                <div><strong>Email:</strong><br>info@tlk.ru</div>
+            </div>
+            <div class="contact-row">
+                <div class="contact-icon">📍</div>
+                <div><strong>Адрес:</strong><br>г. Москва, ул. Тверская, 10</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2.8 О компании -->
+    <div id="page-about" class="page container">
+        <div class="info-card">
+            <h1>О компании</h1>
+            <p style="line-height:1.6; color:var(--text-secondary); margin-bottom:24px;">
+                ТЛК Портал — ведущая логистическая платформа, обеспечивающая прозрачность процессов перевозки грузов. Мы соединяем клиентов, менеджеров и водителей в единой цифровой экосистеме для максимально эффективной доставки.
+            </p>
+            <h2>Организационная структура</h2>
+            <div class="stats-grid">
+                <div class="stat-box">
+                    <span class="stat-num">18</span>
+                    <span class="stat-label">менеджеров</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-num">10</span>
+                    <span class="stat-label">диспетчеров</span>
+                </div>
+                <div class="stat-box">
+                    <span class="stat-num">210</span>
+                    <span class="stat-label">водителей</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 2.9 Карта сайта (Modal) -->
+    <div id="modal-sitemap" class="modal-overlay" onclick="closeModal(event)">
+        <div class="modal">
+            <div class="modal-close" onclick="toggleSitemap(false)">×</div>
+            <h2>🗺️ Карта сайта</h2>
+            <ul class="sitemap-list">
+                <li onclick="navTo('home')"> Главная</li>
+                <li onclick="navTo('login')">🔑 Вход в систему</li>
+                <li onclick="navTo('lkk')">👤 Личный кабинет клиента</li>
+                <li class="sitemap-sub" onclick="navTo('create-order')">• Создание заявки</li>
+                <li onclick="navTo('lkm')">📋 Личный кабинет менеджера</li>
+                <li onclick="navTo('lkv')"> Личный кабинет водителя</li>
+                <li onclick="navTo('contacts')">📞 Контакты</li>
+                <li onclick="navTo('about')">ℹ️ О компании</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- 2.10 Контекстное меню -->
+    <div id="context-menu" class="context-menu"></div>
+
+    <script>
+        // --- State Management ---
+        let currentUser = null; // { role: 'client'|'manager'|'driver', name: '...' }
+        let currentFilter = { page: null, column: null, value: null };
+
+        // Mock Data
+        const orders = [
+            { id: 1, date: '15.08.2026 10:30', weight: 500, status: 'delivered', statusDate: '16.08.2026 14:20', from: 'Москва', to: 'Санкт-Петербург', client: 'Иванов И.И.', manager: 'Петров П.П.', driver: 'Смирнов А.В.' },
+            { id: 2, date: '16.08.2026 09:15', weight: 250, status: 'transit', statusDate: '17.08.2026 08:00', from: 'Казань', to: 'Екатеринбург', client: 'Иванов И.И.', manager: 'Сидоров С.С.', driver: 'Кузнецов И.И.' },
+            { id: 3, date: '17.08.2026 11:00', weight: 1000, status: 'assigned', statusDate: '17.08.2026 11:30', from: 'Новосибирск', to: 'Москва', client: 'Иванов И.И.', manager: 'Петров П.П.', driver: null },
+            { id: 4, date: '12.04.2024', weight: 120, status: 'new', statusDate: '12.04.2024', from: 'Москва', to: 'Тула', client: 'ООО "ГрузЭкспресс"', manager: 'Иванов А.С.', driver: null },
+            { id: 5, date: '13.03.2024', weight: 800, status: 'transit', statusDate: '13.04.2024 09:22', from: 'Самара', to: 'Уфа', client: 'ООО "РегионТранс"', manager: 'Петров П.П.', driver: 'Попов В.В.' }
+        ];
+
+        const drivers = ['Смирнов А.В.', 'Кузнецов И.И.', 'Попов В.В.', 'Соколов Д.Д.'];
+        const statuses = [
+            { key: 'new', label: 'Новая', class: 'new' },
+            { key: 'assigned', label: 'Назначена', class: 'assigned' },
+            { key: 'transit', label: 'В пути', class: 'transit' },
+            { key: 'delivered', label: 'Доставлена', class: 'delivered' },
+            { key: 'cancelled', label: 'Отменена', class: 'cancelled' }
+        ];
+
+        // --- Navigation ---
+        function navTo(pageId, prefillRole = null) {
+            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+            document.getElementById('page-' + pageId).classList.add('active');
+            
+            // Handle Header Logic
+            const headerUser = document.getElementById('header-user');
+            if (['home', 'login', 'contacts', 'about'].includes(pageId)) {
+                headerUser.style.display = 'none';
+                currentUser = null;
+            } else {
+                headerUser.style.display = 'block';
+                if(prefillRole && !currentUser) {
+                     // Simulating login for demo purposes when clicking cards
+                     const names = { client: 'Иванов И.И.', manager: 'Петров П.П.', driver: 'Смирнов А.В.' };
+                     currentUser = { role: prefillRole, name: names[prefillRole] };
+                     document.getElementById('login-role').value = prefillRole;
+                }
+                headerUser.textContent = currentUser ? currentUser.name : 'Гость';
+            }
+
+            // Refresh tables if needed
+            if (pageId === 'lkk') renderTable('lkk');
+            if (pageId === 'lkm') renderTable('lkm');
+            if (pageId === 'lkv') renderTable('lkv');
+            
+            window.scrollTo(0,0);
+        }
+
+        function handleLogoClick() {
+            const homePage = document.getElementById('page-home');
+            if (homePage.classList.contains('active')) {
+                toggleSitemap(true);
+            } else {
+                navTo('home');
+            }
+        }
+
+        function toggleSitemap(show) {
+            document.getElementById('modal-sitemap').style.display = show ? 'flex' : 'none';
+        }
+        
+        function closeModal(e) {
+            if (e.target.id === 'modal-sitemap') toggleSitemap(false);
+        }
+
+        // --- Auth Simulation ---
+        function performLogin() {
+            const role = document.getElementById('login-role').value.toLowerCase();
+            const user = document.getElementById('login-user').value;
+            
+            if (!role || !user) { alert('Заполните поля'); return; }
+            
+            const names = { client: 'Иванов И.И.', manager: 'Петров П.П.', driver: 'Смирнов А.В.' };
+            currentUser = { role: role, name: names[role] || user };
+            
+            if (role === 'client') navTo('lkk');
+            else if (role === 'manager') navTo('lkm');
+            else if (role === 'driver') navTo('lkv');
+            else alert('Неизвестная роль. Используйте: client, manager, driver');
+        }
+
+        // --- Table Rendering ---
+        function getStatusBadge(statusKey) {
+            const s = statuses.find(x => x.key === statusKey) || statuses[0];
+            return `<span class="badge ${s.class}" oncontextmenu="showCtxStatus(event, '${statusKey}')">${s.label}</span>`;
+        }
+
+        function renderTable(view) {
+            const tbody = document.getElementById('table-' + view);
+            tbody.innerHTML = '';
+            
+            let data = orders;
+            // Filter by Role
+            if (view === 'lkk') data = orders.filter(o => o.client === currentUser.name);
+            if (view === 'lkv') data = orders.filter(o => o.driver === currentUser.name && ['assigned','transit','delivered'].includes(o.status));
+            
+            // Filter by Context Click
+            if (currentFilter.page === view && currentFilter.value) {
+                data = data.filter(o => o[currentFilter.column] === currentFilter.value);
+            }
+
+            if (data.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="8" class="empty-state">Нет данных для отображения</td></tr>`;
+                return;
+            }
+
+            data.forEach(o => {
+                let row = '<tr>';
+                if (view === 'lkk') {
+                    const clickAction = o.status === 'delivered' ? `onclick="alert('Подтвердите получение груза №${o.id}')"` : '';
+                    row += `
+                        <td ${clickAction} style="${o.status==='delivered'?'cursor:pointer;font-weight:bold':''}">${o.id}</td>
+                        <td>${o.date}</td>
+                        <td>${o.weight}</td>
+                        <td>${getStatusBadge(o.status)}</td>
+                        <td>${o.statusDate}</td>
+                        <td>${o.from}</td>
+                        <td>${o.to}</td>
+                        <td><span class="link-text" onclick="alert('Тел: +79001234567')">${o.manager}</span></td>
+                    `;
+                } else if (view === 'lkm') {
+                    row += `
+                        <td>${o.id}</td>
+                        <td>${o.date}</td>
+                        <td>${o.client}</td>
+                        <td><span class="link-text" oncontextmenu="showCtxDriver(event, '${o.id}', '${o.driver||''}')">${o.driver || 'Не назначен'}</span></td>
+                        <td>${getStatusBadge(o.status)}</td>
+                        <td>${o.statusDate}</td>
+                        <td>${o.from}</td>
+                        <td>${o.to}</td>
+                    `;
+                } else if (view === 'lkv') {
+                    let numClick = '';
+                    if(o.status === 'assigned') numClick = `onclick="if(confirm('Начать рейс?')) updateStatus(${o.id}, 'transit')"`;
+                    if(o.status === 'transit') numClick = `onclick="if(confirm('Завершить рейс?')) updateStatus(${o.id}, 'delivered')"`;
+                    
+                    row += `
+                        <td ${numClick} style="${numClick?'cursor:pointer;color:var(--primary)':''}">${o.id}</td>
+                        <td>${o.date}</td>
+                        <td>${o.client}</td>
+                        <td>${o.manager}</td>
+                        <td>${getStatusBadge(o.status)}</td>
+                        <td>${o.statusDate}</td>
+                        <td>${o.from}</td>
+                        <td>${o.to}</td>
+                    `;
+                }
+                row += '</tr>';
+                tbody.innerHTML += row;
+            });
+        }
+
+        function updateStatus(id, newStatus) {
+            const order = orders.find(o => o.id === id);
+            if(order) {
+                order.status = newStatus;
+                order.statusDate = new Date().toLocaleString('ru-RU');
+                renderTable('lkv'); // refresh current view
+            }
+        }
+
+        function resetFilter(view) {
+            currentFilter = { page: null, column: null, value: null };
+            renderTable(view);
+        }
+
+        // --- Context Menus ---
+        const ctxMenu = document.getElementById('context-menu');
+
+        function hideCtx() { ctxMenu.style.display = 'none'; }
+        document.addEventListener('click', hideCtx);
+        document.addEventListener('contextmenu', (e) => {
+             // Allow default context menu if not on our specific elements
+             if (!e.target.closest('.badge') && !e.target.closest('.link-text')) hideCtx();
+        });
+
+        function showCtxStatus(e, currentStatus) {
+            e.preventDefault();
+            e.stopPropagation();
+            let html = `<div class="ctx-header">Статусы</div>`;
+            html += `<div class="ctx-item" onclick="resetFilter('${getPageByView()}')"><b>Сбросить фильтр</b></div><div class="ctx-divider"></div>`;
+            
+            statuses.forEach(s => {
+                const isActive = s.key === currentStatus ? 'ctx-active' : '';
+                html += `<div class="ctx-item ${isActive}" onclick="applyFilter('status', '${s.key}')">
+                            <span style="width:8px;height:8px;border-radius:50%;background:${getColor(s.key)}"></span> ${s.label}
+                         </div>`;
+            });
+            
+            positionMenu(e);
+            ctxMenu.innerHTML = html;
+            ctxMenu.style.display = 'block';
+        }
+
+        function showCtxDriver(e, orderId, currentDriver) {
+            e.preventDefault();
+            e.stopPropagation();
+            let html = `<div class="ctx-header">Выберите водителя</div>`;
+            if(currentDriver) html += `<div class="ctx-item" style="color:var(--text-secondary)">Текущий: ${currentDriver}</div>`;
+            
+            drivers.forEach(d => {
+                html += `<div class="ctx-item" onclick="assignDriver(${orderId}, '${d}')">${d}</div>`;
+            });
+            
+            if(currentDriver) {
+                html += `<div class="ctx-divider"></div>`;
+                html += `<div class="ctx-item ctx-danger" onclick="assignDriver(${orderId}, null)">Снять водителя</div>`;
+            }
+
+            positionMenu(e);
+            ctxMenu.innerHTML = html;
+            ctxMenu.style.display = 'block';
+        }
+
+        function positionMenu(e) {
+            let x = e.pageX;
+            let y = e.pageY;
+            // Simple boundary check
+            if (x + 200 > window.innerWidth) x -= 200;
+            if (y + 200 > window.innerHeight) y -= 200;
+            
+            ctxMenu.style.left = x + 'px';
+            ctxMenu.style.top = y + 'px';
+        }
+
+        // Helper logic for filters/actions
+        function getPageByView() {
+            if(document.getElementById('page-lkk').classList.contains('active')) return 'lkk';
+            if(document.getElementById('page-lkm').classList.contains('active')) return 'lkm';
+            return 'lkv';
+        }
+
+        function getColor(key) {
+            const map = { new:'#9ca3af', assigned:'#2563eb', transit:'#fbbf24', delivered:'#10b981', cancelled:'#ef4444' };
+            return map[key];
+        }
+
+        function applyFilter(col, val) {
+            currentFilter = { page: getPageByView(), column: col, value: val };
+            renderTable(getPageByView());
+            hideCtx();
+        }
+
+        function assignDriver(orderId, driverName) {
+            const o = orders.find(x => x.id === orderId);
+            if(o) o.driver = driverName;
+            renderTable('lkm');
+            hideCtx();
+        }
+
+        function submitOrder() {
+            alert('Заявка успешно создана!');
+            navTo('lkk');
+        }
+
+        // Init
+        // navTo('home'); 
+    </script>
+</body>
+</html>

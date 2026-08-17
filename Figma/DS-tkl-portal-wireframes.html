@@ -1,0 +1,778 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ТЛК-Портал — HTML-прототип всех страниц</title>
+    <style>
+        /* ============================================================
+           ГЛОБАЛЬНЫЕ СТИЛИ (как в проекте)
+           ============================================================ */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+        body {
+            background: #F5F5F5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px 0;
+        }
+        .page-wrapper {
+            width: 1440px;
+            max-width: 100%;
+            background: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.05);
+            margin-bottom: 40px;
+        }
+        .page-label {
+            background: #202124;
+            color: white;
+            padding: 8px 40px;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+
+        /* ============================================================
+           ОБЩИЕ КОМПОНЕНТЫ
+           ============================================================ */
+        .header {
+            background: #202124;
+            color: white;
+            padding: 16px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 80px;
+        }
+        .header .logo {
+            font-size: 20px;
+            font-weight: 700;
+            color: white;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .header .user-info {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+        .header .user-info .name {
+            font-size: 16px;
+        }
+
+        .btn-primary {
+            background: #1A73E8;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-size: 16px;
+            cursor: pointer;
+            display: inline-block;
+        }
+        .btn-primary:hover { background: #1557b0; }
+
+        .table-container {
+            padding: 0 40px 40px 40px;
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        th {
+            background: #F1F3F4;
+            color: #5F6368;
+            font-weight: 600;
+            text-align: left;
+            padding: 12px 16px;
+            cursor: default;
+        }
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid #E0E0E0;
+        }
+        tr:hover {
+            background: #F8F9FA;
+        }
+
+        /* Статусы */
+        .status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+        .status-Создана { background: #FBBC04; color: #202124; }
+        .status-Назначена { background: #1A73E8; color: white; }
+        .status-В_пути { background: #1A73E8; color: white; }
+        .status-Доставлена { background: #34A853; color: white; }
+        .status-Отменена { background: #EA4335; color: white; }
+        .status-Получена { background: #34A853; color: white; }
+
+        /* Формы */
+        .form-container {
+            padding: 40px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            font-size: 14px;
+            color: #5F6368;
+            margin-bottom: 6px;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid #DADCE0;
+            border-radius: 8px;
+            font-size: 16px;
+            background: white;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #1A73E8;
+        }
+
+        .page-title {
+            font-size: 32px;
+            font-weight: 700;
+            padding: 20px 40px 10px 40px;
+        }
+
+        /* Главная сетка карточек */
+        .main-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 24px;
+            padding: 40px;
+        }
+        .main-card {
+            background: white;
+            border: 1px solid #E0E0E0;
+            border-radius: 12px;
+            padding: 32px 24px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .main-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            transform: translateY(-2px);
+        }
+        .main-card h3 {
+            font-size: 18px;
+            margin-bottom: 8px;
+            color: #202124;
+        }
+        .main-card p {
+            font-size: 14px;
+            color: #5F6368;
+        }
+
+        /* Карта сайта (модалка) */
+        .sitemap-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .sitemap-modal {
+            background: white;
+            border-radius: 16px;
+            padding: 30px 40px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            position: relative;
+        }
+        .sitemap-modal .close {
+            position: absolute;
+            top: 12px;
+            right: 16px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+            color: #5F6368;
+        }
+        .sitemap-modal h2 {
+            margin-top: 0;
+            color: #202124;
+            font-weight: 700;
+            font-size: 24px;
+        }
+        .sitemap-modal ul {
+            list-style: none;
+            padding-left: 0;
+            font-size: 16px;
+            line-height: 2;
+        }
+        .sitemap-modal ul li {
+            cursor: pointer;
+            padding: 4px 0;
+        }
+        .sitemap-modal ul li:hover {
+            color: #1A73E8;
+        }
+        .sitemap-modal ul ul {
+            padding-left: 20px;
+        }
+
+        /* Контекстное меню (демо) */
+        .context-menu-demo {
+            position: relative;
+            display: inline-block;
+            margin: 20px 40px;
+        }
+        .context-menu-box {
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 150px;
+            padding: 4px 0;
+            font-size: 14px;
+            display: inline-block;
+        }
+        .context-item {
+            padding: 8px 16px;
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .context-item:hover {
+            background: #f1f3f4;
+        }
+        .context-item.border-bottom {
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .context-item.active {
+            background: #e8f0fe;
+            font-weight: bold;
+        }
+        .context-item.danger {
+            color: #EA4335;
+        }
+        .context-item.header {
+            font-weight: bold;
+            cursor: default;
+        }
+        .context-item.header:hover {
+            background: transparent;
+        }
+
+        /* Вспомогательные отступы */
+        .flex-between {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 40px 0 40px;
+        }
+        .mt-20 { margin-top: 20px; }
+        .mb-20 { margin-bottom: 20px; }
+        .text-center { text-align: center; }
+        .text-muted { color: #5F6368; }
+        .back-link { display: none; } /* убрали стрелки назад */
+
+        /* Для разделения страниц в прототипе */
+        .page-divider {
+            height: 4px;
+            background: #EA4335;
+            margin: 0 40px 20px 40px;
+            border-radius: 2px;
+        }
+
+        /* Адаптив для отображения в браузере */
+        @media (max-width: 1440px) {
+            .page-wrapper { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ============================================================
+     СТРАНИЦА 1 – ГЛАВНАЯ
+     ============================================================ -->
+<div class="page-wrapper">
+    <div class="page-label">Главная страница</div>
+    <div class="header">
+        <div class="logo">ТЛК Портал</div>
+        <div></div>
+    </div>
+    <div style="text-align:center;padding:20px 0 0 0;">
+        <h1 style="font-size:32px;font-weight:700;color:#202124;">ТЛК Портал</h1>
+        <p style="color:#5F6368;font-size:18px;margin-top:8px;">Личный кабинет для клиентов и партнёров</p>
+    </div>
+    <div class="main-grid">
+        <div class="main-card"><h3>👤 Личный кабинет клиента</h3><p>Оформляйте заявки</p></div>
+        <div class="main-card"><h3>📋 Панель менеджера</h3><p>Управляйте всеми заявками</p></div>
+        <div class="main-card"><h3>🚛 Личный кабинет водителя</h3><p>Отслеживайте рейсы</p></div>
+        <div class="main-card"><h3>📞 Контакты</h3><p>Свяжитесь с нами</p></div>
+        <div class="main-card"><h3>ℹ️ О компании</h3><p>Узнайте о нас</p></div>
+    </div>
+</div>
+
+<!-- ============================================================
+     СТРАНИЦА 2 – ВХОД
+     ============================================================ -->
+<div class="page-wrapper">
+    <div class="page-label">Страница входа</div>
+    <div class="header">
+        <div class="logo">ТЛК Портал</div>
+        <div></div>
+    </div>
+    <div class="form-container" style="max-width:400px; margin:40px auto;">
+        <h2 style="font-size:28px;font-weight:700;margin-bottom:8px;">Вход в систему</h2>
+        <p style="color:#5F6368;margin-bottom:24px;">Введите учётные данные</p>
+        <div class="form-group">
+            <label>Роль</label>
+            <input type="text" placeholder="client / manager / driver" value="client">
+        </div>
+        <div class="form-group">
+            <label>Логин</label>
+            <input type="text" placeholder="Введите логин" value="client1">
+        </div>
+        <div class="form-group">
+            <label>Пароль</label>
+            <input type="password" placeholder="Введите пароль" value="123">
+        </div>
+        <button class="btn-primary" style="width:100%;">Войти</button>
+        <div style="margin-top:16px;text-align:center;font-size:14px;color:#5F6368;">
+            Примеры: client1/123, manager1/123, driver1/123
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     СТРАНИЦА 3 – ЛИЧНЫЙ КАБИНЕТ КЛИЕНТА (ЛКК)
+     ============================================================ -->
+<div class="page-wrapper">
+    <div class="page-label">Личный кабинет клиента (ЛКК)</div>
+    <div class="header">
+        <div class="logo">ТЛК Портал</div>
+        <div class="user-info">
+            <span class="name">ООО "Ромашка"</span>
+        </div>
+    </div>
+    <div class="flex-between">
+        <h1 class="page-title" style="padding:0;">Мои заявки</h1>
+        <button class="btn-primary">+ Создать заявку</button>
+    </div>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>№</th>
+                    <th>Дата</th>
+                    <th>Вес (кг)</th>
+                    <th style="cursor:pointer;">Статус ↓</th>
+                    <th>Дата статуса</th>
+                    <th>Адрес отправления</th>
+                    <th>Адрес доставки</th>
+                    <th>Менеджер</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="cursor:pointer;">0800341</td>
+                    <td>02.08.2026, 10:15</td>
+                    <td>1500</td>
+                    <td><span class="status status-Доставлена">Доставлена</span></td>
+                    <td>05.08.2026, 16:30</td>
+                    <td>Москва, Тверская, 1</td>
+                    <td>Санкт-Петербург, Невский пр., 10</td>
+                    <td style="cursor:pointer;">Иван Смирнов</td>
+                </tr>
+                <tr>
+                    <td style="cursor:pointer;">0800342</td>
+                    <td>03.08.2026, 09:00</td>
+                    <td>2500</td>
+                    <td><span class="status status-Доставлена">Доставлена</span></td>
+                    <td>06.08.2026, 14:20</td>
+                    <td>Москва, Арбат, 15</td>
+                    <td>Казань, Кремлёвская, 6</td>
+                    <td style="cursor:pointer;">Ольга Кузнецова</td>
+                </tr>
+                <tr>
+                    <td style="cursor:pointer;">0800343</td>
+                    <td>04.08.2026, 11:45</td>
+                    <td>1980</td>
+                    <td><span class="status status-В_пути">В пути</span></td>
+                    <td>07.08.2026, 08:10</td>
+                    <td>Москва, Ленинградский пр., 33</td>
+                    <td>Екатеринбург, Ленина, 22</td>
+                    <td style="cursor:pointer;">Пётр Орлов</td>
+                </tr>
+                <tr>
+                    <td style="cursor:pointer;">0800344</td>
+                    <td>04.08.2026, 14:20</td>
+                    <td>900</td>
+                    <td><span class="status status-Отменена">Отменена</span></td>
+                    <td>04.08.2026, 16:00</td>
+                    <td>Москва, Кутузовский пр., 12</td>
+                    <td>Москва, Тверская, 1</td>
+                    <td style="cursor:pointer;">Иван Смирнов</td>
+                </tr>
+                <tr>
+                    <td style="cursor:pointer;">0800345</td>
+                    <td>05.08.2026, 08:30</td>
+                    <td>750</td>
+                    <td><span class="status status-В_пути">В пути</span></td>
+                    <td>07.08.2026, 09:45</td>
+                    <td>Москва, Новый Арбат, 8</td>
+                    <td>Новосибирск, Красный пр., 50</td>
+                    <td style="cursor:pointer;">Ольга Кузнецова</td>
+                </tr>
+                <tr>
+                    <td style="cursor:pointer;">0800346</td>
+                    <td>05.08.2026, 13:10</td>
+                    <td>3400</td>
+                    <td><span class="status status-В_пути">В пути</span></td>
+                    <td>06.08.2026, 18:20</td>
+                    <td>Санкт-Петербург, Невский пр., 10</td>
+                    <td>Москва, Арбат, 15</td>
+                    <td style="cursor:pointer;">Пётр Орлов</td>
+                </tr>
+                <tr>
+                    <td style="cursor:pointer;">0800347</td>
+                    <td>07.08.2026, 10:00</td>
+                    <td>1340</td>
+                    <td><span class="status status-Создана">Создана</span></td>
+                    <td>07.08.2026, 10:00</td>
+                    <td>Казань, Кремлёвская, 6</td>
+                    <td>Екатеринбург, Ленина, 22</td>
+                    <td style="cursor:pointer;">Иван Смирнов</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ============================================================
+     СТРАНИЦА 4 – ПАНЕЛЬ МЕНЕДЖЕРА (ЛКМ)
+     ============================================================ -->
+<div class="page-wrapper">
+    <div class="page-label">Панель менеджера (ЛКМ)</div>
+    <div class="header">
+        <div class="logo">ТЛК Портал</div>
+        <div class="user-info">
+            <span class="name">Иван Смирнов</span>
+        </div>
+    </div>
+    <h1 class="page-title">Все заявки</h1>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>№</th>
+                    <th>Дата</th>
+                    <th>Клиент</th>
+                    <th style="cursor:pointer;">Водитель ↓</th>
+                    <th style="cursor:pointer;">Статус ↓</th>
+                    <th>Дата статуса</th>
+                    <th>Адрес отправления</th>
+                    <th>Адрес доставки</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>0800341</td>
+                    <td>02.08.2026, 10:15</td>
+                    <td>ООО "Ромашка"</td>
+                    <td style="cursor:pointer;">Сергей Петров</td>
+                    <td><span class="status status-Доставлена">Доставлена</span></td>
+                    <td>05.08.2026, 16:30</td>
+                    <td>Москва, Тверская, 1</td>
+                    <td>Санкт-Петербург, Невский пр., 10</td>
+                </tr>
+                <tr>
+                    <td>0801342</td>
+                    <td>03.08.2026, 09:00</td>
+                    <td>ООО "Газпром"</td>
+                    <td style="cursor:pointer;">Иван Ляпин</td>
+                    <td><span class="status status-Доставлена">Доставлена</span></td>
+                    <td>06.08.2026, 14:20</td>
+                    <td>Москва, Арбат, 15</td>
+                    <td>Казань, Кремлёвская, 6</td>
+                </tr>
+                <tr>
+                    <td>0801343</td>
+                    <td>04.08.2026, 11:45</td>
+                    <td>ООО "Газпром"</td>
+                    <td style="cursor:pointer;">Леонид Крутов</td>
+                    <td><span class="status status-В_пути">В пути</span></td>
+                    <td>07.08.2026, 08:10</td>
+                    <td>Москва, Ленинградский пр., 33</td>
+                    <td>Екатеринбург, Ленина, 22</td>
+                </tr>
+                <tr>
+                    <td>0800344</td>
+                    <td>04.08.2026, 14:20</td>
+                    <td>ООО "Ромашка"</td>
+                    <td style="cursor:pointer;">—</td>
+                    <td><span class="status status-Отменена">Отменена</span></td>
+                    <td>04.08.2026, 16:00</td>
+                    <td>Москва, Кутузовский пр., 12</td>
+                    <td>Москва, Тверская, 1</td>
+                </tr>
+                <tr>
+                    <td>0800345</td>
+                    <td>05.08.2026, 08:30</td>
+                    <td>ООО "Ромашка"</td>
+                    <td style="cursor:pointer;">Сергей Петров</td>
+                    <td><span class="status status-В_пути">В пути</span></td>
+                    <td>07.08.2026, 09:45</td>
+                    <td>Москва, Новый Арбат, 8</td>
+                    <td>Новосибирск, Красный пр., 50</td>
+                </tr>
+                <tr>
+                    <td>0803346</td>
+                    <td>05.08.2026, 13:10</td>
+                    <td>ООО "Яндекс"</td>
+                    <td style="cursor:pointer;">Иван Ляпин</td>
+                    <td><span class="status status-В_пути">В пути</span></td>
+                    <td>06.08.2026, 18:20</td>
+                    <td>Санкт-Петербург, Невский пр., 10</td>
+                    <td>Москва, Арбат, 15</td>
+                </tr>
+                <tr>
+                    <td>0800347</td>
+                    <td>07.08.2026, 10:00</td>
+                    <td>ООО "Ромашка"</td>
+                    <td style="cursor:pointer;">—</td>
+                    <td><span class="status status-Создана">Создана</span></td>
+                    <td>07.08.2026, 10:00</td>
+                    <td>Казань, Кремлёвская, 6</td>
+                    <td>Екатеринбург, Ленина, 22</td>
+                </tr>
+                <tr>
+                    <td>0805348</td>
+                    <td>10.08.2026, 09:20</td>
+                    <td>ООО "ИКС"</td>
+                    <td style="cursor:pointer;">—</td>
+                    <td><span class="status status-Создана">Создана</span></td>
+                    <td>10.08.2026, 09:20</td>
+                    <td>Москва, Тверская, 10</td>
+                    <td>Санкт-Петербург, Лиговский пр., 44</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ============================================================
+     СТРАНИЦА 5 – ЛИЧНЫЙ КАБИНЕТ ВОДИТЕЛЯ (ЛКВ)
+     ============================================================ -->
+<div class="page-wrapper">
+    <div class="page-label">Личный кабинет водителя (ЛКВ)</div>
+    <div class="header">
+        <div class="logo">ТЛК Портал</div>
+        <div class="user-info">
+            <span class="name">Сергей Волков</span>
+        </div>
+    </div>
+    <h1 class="page-title">Мои рейсы</h1>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>№</th>
+                    <th>Дата</th>
+                    <th>Клиент</th>
+                    <th>Менеджер</th>
+                    <th style="cursor:pointer;">Статус ↓</th>
+                    <th>Дата статуса</th>
+                    <th>Адрес отправления</th>
+                    <th>Адрес доставки</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td style="cursor:pointer;">0800341</td>
+                    <td>02.08.2026, 10:15</td>
+                    <td>ООО "Ромашка"</td>
+                    <td>Иван Смирнов</td>
+                    <td><span class="status status-Доставлена">Доставлена</span></td>
+                    <td>05.08.2026, 16:30</td>
+                    <td>Москва, Тверская, 1</td>
+                    <td>Санкт-Петербург, Невский пр., 10</td>
+                </tr>
+                <tr>
+                    <td style="cursor:pointer;">0800345</td>
+                    <td>05.08.2026, 08:30</td>
+                    <td>ООО "Ромашка"</td>
+                    <td>Ольга Кузнецова</td>
+                    <td><span class="status status-В_пути">В пути</span></td>
+                    <td>07.08.2026, 09:45</td>
+                    <td>Москва, Новый Арбат, 8</td>
+                    <td>Новосибирск, Красный пр., 50</td>
+                </tr>
+                <tr>
+                    <td style="cursor:pointer;">0801343</td>
+                    <td>04.08.2026, 11:45</td>
+                    <td>ООО "Газпром"</td>
+                    <td>Пётр Орлов</td>
+                    <td><span class="status status-Назначена">Назначена</span></td>
+                    <td>07.08.2026, 08:10</td>
+                    <td>Москва, Ленинградский пр., 33</td>
+                    <td>Екатеринбург, Ленина, 22</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- ============================================================
+     СТРАНИЦА 6 – СОЗДАНИЕ ЗАЯВКИ
+     ============================================================ -->
+<div class="page-wrapper">
+    <div class="page-label">Создание заявки</div>
+    <div class="header">
+        <div class="logo">ТЛК Портал</div>
+        <div class="user-info">
+            <span class="name">ООО "Ромашка"</span>
+        </div>
+    </div>
+    <h1 class="page-title">Новая заявка</h1>
+    <div class="form-container">
+        <h3 style="margin-bottom:10px;">📍 Адрес отправления</h3>
+        <div class="form-group"><label>Город</label><input type="text" placeholder="Введите город" value="Москва"></div>
+        <div class="form-group"><label>Улица</label><input type="text" placeholder="Введите улицу" value="Тверская"></div>
+        <div class="form-group"><label>Дом</label><input type="text" placeholder="Введите дом" value="1"></div>
+
+        <h3 style="margin:20px 0 10px 0;">📍 Адрес доставки</h3>
+        <div class="form-group"><label>Город</label><input type="text" placeholder="Введите город" value="Санкт-Петербург"></div>
+        <div class="form-group"><label>Улица</label><input type="text" placeholder="Введите улицу" value="Невский пр."></div>
+        <div class="form-group"><label>Дом</label><input type="text" placeholder="Введите дом" value="10"></div>
+
+        <div class="form-group"><label>Вес (кг)</label><input type="number" placeholder="Введите вес" value="1500"></div>
+        <button class="btn-primary">Создать заявку</button>
+    </div>
+</div>
+
+<!-- ============================================================
+     СТРАНИЦА 7 – КОНТАКТЫ
+     ============================================================ -->
+<div class="page-wrapper">
+    <div class="page-label">Контакты</div>
+    <div class="header">
+        <div class="logo">ТЛК Портал</div>
+        <div></div>
+    </div>
+    <h1 class="page-title">Контакты</h1>
+    <div style="padding:20px 40px;font-size:18px;">
+        <p>📞 Телефон: +7 (495) 123-45-67</p>
+        <p>✉️ Email: info@tlk.ru</p>
+        <p>📍 Адрес: г. Москва, ул. Тверская, 10</p>
+    </div>
+</div>
+
+<!-- ============================================================
+     СТРАНИЦА 8 – О КОМПАНИИ
+     ============================================================ -->
+<div class="page-wrapper">
+    <div class="page-label">О компании</div>
+    <div class="header">
+        <div class="logo">ТЛК Портал</div>
+        <div></div>
+    </div>
+    <h1 class="page-title">О компании</h1>
+    <div style="padding:20px 40px;font-size:16px;max-width:800px;line-height:1.6;">
+        <p>ООО «ТрансЛогистик» — российская транспортная компания, осуществляющая грузовые автомобильные перевозки по территории Российской Федерации.</p>
+        <p>Предприятие обслуживает юридических лиц — промышленные заводы, строительные организации, торговые сети, дистрибьюторские компании.</p>
+        <p>Штатная структура:</p>
+        <ul style="padding-left:20px;">
+            <li>18 менеджеров по работе с клиентами</li>
+            <li>10 диспетчеров</li>
+            <li>210 водителей</li>
+        </ul>
+        <p style="margin-top:12px;">Материально-техническая база: Собственный автопарк насчитывает около 190 единиц грузового автотранспорта различной грузоподъёмности.</p>
+    </div>
+</div>
+
+<!-- ============================================================
+     СТРАНИЦА 9 – КАРТА САЙТА (МОДАЛЬНОЕ ОКНО)
+     ============================================================ -->
+<div class="page-wrapper">
+    <div class="page-label">Карта сайта (модальное окно)</div>
+    <div class="sitemap-overlay" style="position:relative; height:500px; pointer-events:none;">
+        <div class="sitemap-modal" style="pointer-events:auto;">
+            <button class="close">✕</button>
+            <h2>🗺️ Карта сайта</h2>
+            <ul>
+                <li>Главная</li>
+                <li>Вход в систему</li>
+                <li>Личный кабинет клиента
+                    <ul>
+                        <li>Создание заявки</li>
+                    </ul>
+                </li>
+                <li>Личный кабинет менеджера</li>
+                <li>Личный кабинет водителя</li>
+                <li>Контакты</li>
+                <li>О компании</li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<!-- ============================================================
+     СТРАНИЦА 10 – КОНТЕКСТНОЕ МЕНЮ (ДЕМОНСТРАЦИЯ)
+     ============================================================ -->
+<div class="page-wrapper">
+    <div class="page-label">Контекстное меню (демонстрация)</div>
+    <div class="header">
+        <div class="logo">ТЛК Портал</div>
+        <div></div>
+    </div>
+    <div style="padding:20px 40px;">
+        <h3 style="margin-bottom:12px;">📌 Меню фильтра по статусу</h3>
+        <div class="context-menu-demo">
+            <div class="context-menu-box">
+                <div class="context-item border-bottom">🔄 Сбросить фильтр</div>
+                <div class="context-item active">Создана</div>
+                <div class="context-item">Назначена</div>
+                <div class="context-item">В пути</div>
+                <div class="context-item">Доставлена</div>
+                <div class="context-item">Отменена</div>
+                <div class="context-item">Получена</div>
+            </div>
+        </div>
+
+        <h3 style="margin:30px 0 12px 0;">📌 Меню выбора водителя</h3>
+        <div class="context-menu-demo">
+            <div class="context-menu-box">
+                <div class="context-item header">👨✈️ Выберите водителя</div>
+                <div class="context-item active" style="background:#e8f0fe; font-weight:bold;">✅ Текущий: Сергей Петров</div>
+                <div class="context-item">✓ Сергей Петров</div>
+                <div class="context-item">Иван Ляпин</div>
+                <div class="context-item">Леонид Крутов</div>
+                <div class="context-item">Дмитрий Соколов</div>
+                <div class="context-item danger" style="border-top:1px solid #e0e0e0;">❌ Снять водителя</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+</body>
+</html>
