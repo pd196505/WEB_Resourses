@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ТЛК Портал</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+    <div id="app"></div>
+
+    <!-- 1. Конфигурация экземпляра (схема + адрес API) — ПЕРВЫМ -->
+    <script src="config.js"></script>
+
+    <!-- 2. Модули личных кабинетов -->
+    <script src="modules/lkk.js"></script>
+    <script src="modules/lkm.js"></script>
+    <script src="modules/lkv.js"></script>
+
+    <!-- 3. Основной файл -->
+    <script src="app.js"></script>
+</body>
+</html>
