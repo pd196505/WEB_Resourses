@@ -5,7 +5,7 @@
 
 DO $$
 DECLARE
-    student_id  text := '01';   -- ← здесь меняем номер
+    student_id  text := '12';   -- ← здесь меняем номер
     role_name   text := 'stud' || student_id;
     schema_name text := 'tlk' || student_id;
 BEGIN

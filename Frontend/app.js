@@ -1,29 +1,47 @@
 // ============================================================
 // ГЛОБАЛЬНОЕ СОСТОЯНИЕ И ОБЩИЕ ФУНКЦИИ
 // ============================================================
-const state = {  
-    currentPage: 'main',  
-    user: null,  
-    orders: [],  
-    filteredOrders: [],  
-    clients: [],  
-    statuses: [],  
-    managers: [], 
+const state = {
+    currentPage: 'main',
+    user: null,
+    orders: [],
+    filteredOrders: [],
+    clients: [],
+    statuses: [],
+    managers: [],
     drivers: [],
     statusFilter: null,
     driverFilter: null
 };
 
-const API_URL = 'http://localhost:8000';
+// ============================================================
+// КОНФИГУРАЦИЯ (из config.js)
+// ============================================================
+const TLK_CONFIG = window.TLK_CONFIG || {};
+const API_URL = TLK_CONFIG.API_URL || 'http://10.2.9.17:8000';
+const USER_SCHEMA = TLK_CONFIG.SCHEMA || 'tlk01';
 
-function getStatusLabel(status) { return status; }
+if (!window.TLK_CONFIG) {
+    console.error('[TLK] config.js не загружен. Проверьте подключение <script src="config.js"> в index.html.');
+}
 
+// ============================================================
+// ЕДИНАЯ ОБЁРТКА НАД fetch: подставляет X-User-Schema
+// ============================================================
 async function apiFetch(endpoint, options = {}) {
     const url = `${API_URL}${endpoint}`;
+
+    const headers = {
+        'Content-Type': 'application/json',
+        'X-User-Schema': USER_SCHEMA,       // идентификация схемы экземпляра
+        ...(options.headers || {})
+    };
+
     const response = await fetch(url, {
-        headers: { 'Content-Type': 'application/json' },
         ...options,
+        headers: headers,
     });
+
     if (!response.ok) {
         const error = await response.text();
         throw new Error(`Ошибка ${response.status}: ${error}`);
@@ -31,20 +49,33 @@ async function apiFetch(endpoint, options = {}) {
     return response.json();
 }
 
+// ============================================================
+// ВХОД: логин + пароль + роль, схема всегда USER_SCHEMA
+// ============================================================
 async function login(username, password, role) {
     const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'X-User-Schema': USER_SCHEMA
+        },
         body: JSON.stringify({ username, password }),
     });
+
     if (!response.ok) {
         const error = await response.json();
         throw new Error(error.detail || 'Ошибка входа');
     }
+
     const user = await response.json();
     if (user.role !== role) {
         throw new Error(`Роль не совпадает. Ожидается ${role}, получена ${user.role}`);
     }
+
+    // Запоминаем сессию (вместе со схемой — для проверки при восстановлении)
+    localStorage.setItem('user_data', JSON.stringify(user));
+    localStorage.setItem('user_schema', USER_SCHEMA);
+
     return user;
 }
 
@@ -58,7 +89,7 @@ async function loadOrders() {
             state.orders = state.orders.filter(o => allowedStatuses.includes(o.status));
         }
         state.filteredOrders = [...state.orders];
-        console.log('Загруженные заявки:', state.orders);
+        console.log(`[TLK:${USER_SCHEMA}] Загружено заявок:`, state.orders.length);
     } catch (error) {
         console.error('Ошибка загрузки заявок:', error);
         state.orders = [];
@@ -67,13 +98,13 @@ async function loadOrders() {
 }
 
 async function loadStatuses() {
-    try { state.statuses = await apiFetch('/statuses'); } catch (error) { console.error(error); state.statuses = []; }
+    try { state.statuses = await apiFetch('/statuses'); }
+    catch (error) { console.error(error); state.statuses = []; }
 }
 
 async function loadManagers() {
     try {
-        const response = await fetch(`${API_URL}/users?role=manager`);
-        state.managers = await response.json();
+        state.managers = await apiFetch('/users?role=manager');
         console.log('Загруженные менеджеры:', state.managers);
     } catch (error) {
         console.error('Ошибка загрузки менеджеров:', error);
@@ -83,8 +114,7 @@ async function loadManagers() {
 
 async function loadDrivers() {
     try {
-        const response = await fetch(`${API_URL}/users?role=driver`);
-        state.drivers = await response.json();
+        state.drivers = await apiFetch('/users?role=driver');
         console.log('Загруженные водители:', state.drivers);
     } catch (error) {
         console.error('Ошибка загрузки водителей:', error);
@@ -136,9 +166,7 @@ function getUniqueStatuses() {
 function getUniqueDrivers() {
     const drivers = new Set();
     const orders = state.filteredOrders.length > 0 ? state.filteredOrders : state.orders;
-    orders.forEach(o => {
-        if (o.driver_name) drivers.add(o.driver_name);
-    });
+    orders.forEach(o => { if (o.driver_name) drivers.add(o.driver_name); });
     return Array.from(drivers);
 }
 
@@ -147,72 +175,36 @@ function getUniqueDrivers() {
 // ============================================================
 function showSitemap() {
     const existingModal = document.getElementById('sitemap-modal');
-    if (existingModal) {
-        existingModal.remove();
-        return;
-    }
+    if (existingModal) { existingModal.remove(); return; }
 
     const modal = document.createElement('div');
     modal.id = 'sitemap-modal';
     modal.style.cssText = `
-        position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.5);
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        z-index: 9999;
-        font-family: 'Inter', sans-serif;
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.5); display: flex; justify-content: center; align-items: center;
+        z-index: 9999; font-family: 'Inter', sans-serif;
     `;
-
     const content = document.createElement('div');
     content.style.cssText = `
-        background: white;
-        border-radius: 16px;
-        padding: 30px 40px;
-        max-width: 600px;
-        width: 90%;
-        max-height: 80vh;
-        overflow-y: auto;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-        position: relative;
+        background: white; border-radius: 16px; padding: 30px 40px;
+        max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3); position: relative;
     `;
-
     const closeBtn = document.createElement('button');
     closeBtn.textContent = '✕';
     closeBtn.style.cssText = `
-        position: absolute;
-        top: 12px;
-        right: 16px;
-        background: none;
-        border: none;
-        font-size: 24px;
-        cursor: pointer;
-        color: #5F6368;
+        position: absolute; top: 12px; right: 16px; background: none; border: none;
+        font-size: 24px; cursor: pointer; color: #5F6368;
     `;
     closeBtn.onclick = () => modal.remove();
 
     const title = document.createElement('h2');
     title.textContent = '🗺️ Карта сайта';
-    title.style.cssText = `
-        margin-top: 0;
-        color: #202124;
-        font-weight: 700;
-        font-size: 24px;
-    `;
+    title.style.cssText = `margin-top: 0; color: #202124; font-weight: 700; font-size: 24px;`;
 
     const tree = document.createElement('ul');
-    tree.style.cssText = `
-        list-style: none;
-        padding-left: 0;
-        font-size: 16px;
-        line-height: 2;
-    `;
+    tree.style.cssText = `list-style: none; padding-left: 0; font-size: 16px; line-height: 2;`;
 
-    // Структура страниц с указанием роли для перехода
     const pages = [
         { name: 'Главная', link: 'main' },
         { name: 'Вход в систему', link: 'login' },
@@ -229,73 +221,47 @@ function showSitemap() {
         let html = '';
         items.forEach(item => {
             const indent = level * 20;
-            // Определяем, какой обработчик вызывать
             let clickHandler = '';
-            if (item.link === 'main') {
-                clickHandler = `navigate('main'); document.getElementById('sitemap-modal').remove();`;
-            } else if (item.link === 'login') {
-                clickHandler = `navigate('login'); document.getElementById('sitemap-modal').remove();`;
-            } else if (item.link === 'contacts' || item.link === 'about') {
+            if (['main','login','contacts','about'].includes(item.link)) {
                 clickHandler = `navigate('${item.link}'); document.getElementById('sitemap-modal').remove();`;
             } else if (item.link === 'create-order') {
                 clickHandler = `navigateCreateOrder(); document.getElementById('sitemap-modal').remove();`;
             } else {
-                // Для ЛК используем функцию с проверкой роли
                 const role = item.role || 'client';
                 clickHandler = `navigateWithRole('${item.link}', '${role}'); document.getElementById('sitemap-modal').remove();`;
             }
-            html += `<li style="padding-left:${indent}px; cursor:pointer;" onclick="${clickHandler}">
-                ${item.name}
-            </li>`;
+            html += `<li style="padding-left:${indent}px; cursor:pointer;" onclick="${clickHandler}">${item.name}</li>`;
             if (item.children && item.children.length) {
-                html += `<ul style="list-style:none; padding-left:0;">`;
-                html += buildTree(item.children, level + 1);
-                html += `</ul>`;
+                html += `<ul style="list-style:none; padding-left:0;">${buildTree(item.children, level + 1)}</ul>`;
             }
         });
         return html;
     }
 
     tree.innerHTML = buildTree(pages);
-
     content.appendChild(closeBtn);
     content.appendChild(title);
     content.appendChild(tree);
     modal.appendChild(content);
     document.body.appendChild(modal);
-
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.remove();
-    });
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
 }
 
 // ============================================================
 // НАВИГАЦИЯ С ПРОВЕРКОЙ РОЛИ
 // ============================================================
 function navigateWithRole(target, requiredRole) {
-    // Если пользователь не залогинен или его роль не совпадает
     if (!state.user || state.user.role !== requiredRole) {
-        // Сбрасываем пользователя, если он есть, но роль другая
-        if (state.user) {
-            state.user = null;
-            state.orders = [];
-            state.filteredOrders = [];
-        }
-        // Переходим на форму входа с указанием роли
+        if (state.user) { state.user = null; state.orders = []; state.filteredOrders = []; }
         navigate('login', requiredRole);
         return;
     }
-    // Иначе переходим в нужный ЛК
     navigate(target);
 }
 
 function navigateCreateOrder() {
     if (!state.user || state.user.role !== 'client') {
-        if (state.user) {
-            state.user = null;
-            state.orders = [];
-            state.filteredOrders = [];
-        }
+        if (state.user) { state.user = null; state.orders = []; state.filteredOrders = []; }
         navigate('login', 'client');
         return;
     }
@@ -304,181 +270,122 @@ function navigateCreateOrder() {
 
 function handleLogoClick(e) {
     e.preventDefault();
-    if (state.currentPage === 'main') {
-        showSitemap();
-    } else {
-        navigate('main');
-    }
+    if (state.currentPage === 'main') showSitemap();
+    else navigate('main');
 }
 
 // ============================================================
-// КОНТЕКСТНОЕ МЕНЮ (СТАТУС)
+// КОНТЕКСТНЫЕ МЕНЮ
 // ============================================================
 function showContextMenu(e, status) {
     e.preventDefault();
     const menu = document.getElementById('context-menu');
     const statuses = getUniqueStatuses();
-    if (!statuses.length) {
-        menu.style.display = 'none';
-        return;
-    }
-    menu.style.left = e.clientX + 'px';
-    menu.style.top = e.clientY + 'px';
-    menu.style.display = 'block';
-    menu.innerHTML = '';
+    if (!statuses.length) { menu.style.display = 'none'; return; }
+    menu.style.left = e.clientX + 'px'; menu.style.top = e.clientY + 'px';
+    menu.style.display = 'block'; menu.innerHTML = '';
+
     const resetItem = document.createElement('div');
     resetItem.className = 'context-item';
     resetItem.textContent = '🔄 Сбросить фильтр';
     resetItem.style.borderBottom = '1px solid #e0e0e0';
-    resetItem.onclick = () => {
-        filterOrdersByStatus(null);
-        menu.style.display = 'none';
-    };
+    resetItem.onclick = () => { filterOrdersByStatus(null); menu.style.display = 'none'; };
     menu.appendChild(resetItem);
+
     statuses.forEach(s => {
         const item = document.createElement('div');
         item.className = 'context-item';
         item.textContent = s;
-        if (state.statusFilter === s) {
-            item.style.backgroundColor = '#e8f0fe';
-            item.style.fontWeight = 'bold';
-        }
-        item.onclick = () => {
-            filterOrdersByStatus(s);
-            menu.style.display = 'none';
-        };
+        if (state.statusFilter === s) { item.style.backgroundColor = '#e8f0fe'; item.style.fontWeight = 'bold'; }
+        item.onclick = () => { filterOrdersByStatus(s); menu.style.display = 'none'; };
         menu.appendChild(item);
     });
 }
 
-// ============================================================
-// КОНТЕКСТНОЕ МЕНЮ (ВОДИТЕЛЬ — ФИЛЬТР)
-// ============================================================
 function showDriverContextMenu(e, driver) {
     e.preventDefault();
     const menu = document.getElementById('context-menu');
     const drivers = getUniqueDrivers();
-    if (!drivers.length) {
-        menu.style.display = 'none';
-        return;
-    }
-    menu.style.left = e.clientX + 'px';
-    menu.style.top = e.clientY + 'px';
-    menu.style.display = 'block';
-    menu.innerHTML = '';
+    if (!drivers.length) { menu.style.display = 'none'; return; }
+    menu.style.left = e.clientX + 'px'; menu.style.top = e.clientY + 'px';
+    menu.style.display = 'block'; menu.innerHTML = '';
+
     const resetItem = document.createElement('div');
     resetItem.className = 'context-item';
     resetItem.textContent = '🔄 Сбросить фильтр';
     resetItem.style.borderBottom = '1px solid #e0e0e0';
-    resetItem.onclick = () => {
-        filterOrdersByDriver(null);
-        menu.style.display = 'none';
-    };
+    resetItem.onclick = () => { filterOrdersByDriver(null); menu.style.display = 'none'; };
     menu.appendChild(resetItem);
+
     drivers.forEach(d => {
         const item = document.createElement('div');
         item.className = 'context-item';
         item.textContent = d;
-        if (state.driverFilter === d) {
-            item.style.backgroundColor = '#e8f0fe';
-            item.style.fontWeight = 'bold';
-        }
-        item.onclick = () => {
-            filterOrdersByDriver(d);
-            menu.style.display = 'none';
-        };
+        if (state.driverFilter === d) { item.style.backgroundColor = '#e8f0fe'; item.style.fontWeight = 'bold'; }
+        item.onclick = () => { filterOrdersByDriver(d); menu.style.display = 'none'; };
         menu.appendChild(item);
     });
 }
 
-// ============================================================
-// КОНТЕКСТНОЕ МЕНЮ (ВОДИТЕЛЬ — ВЫБОР)
-// ============================================================
 function showDriverSelectionMenu(e, orderId, currentDriver) {
     e.preventDefault();
     const menu = document.getElementById('context-menu');
-    if (!state.drivers || state.drivers.length === 0) {
-        alert('Список водителей не загружен');
-        return;
-    }
-    let x = e.clientX || window.innerWidth / 2 - 100;
-    let y = e.clientY || window.innerHeight / 2 - 100;
-    menu.style.left = x + 'px';
-    menu.style.top = y + 'px';
-    menu.style.display = 'block';
-    menu.innerHTML = '';
+    if (!state.drivers || state.drivers.length === 0) { alert('Список водителей не загружен'); return; }
+    menu.style.left = (e.clientX || window.innerWidth / 2 - 100) + 'px';
+    menu.style.top  = (e.clientY || window.innerHeight / 2 - 100) + 'px';
+    menu.style.display = 'block'; menu.innerHTML = '';
+
     const header = document.createElement('div');
     header.className = 'context-item';
-    header.textContent = '👨✈️ Выберите водителя';
-    header.style.fontWeight = 'bold';
-    header.style.borderBottom = '1px solid #e0e0e0';
-    header.style.cursor = 'default';
+    header.textContent = '👨‍✈️ Выберите водителя';
+    header.style.fontWeight = 'bold'; header.style.borderBottom = '1px solid #e0e0e0'; header.style.cursor = 'default';
     menu.appendChild(header);
-    if (currentDriver && currentDriver !== '') {
-        const currentItem = document.createElement('div');
-        currentItem.className = 'context-item';
-        currentItem.textContent = '✅ Текущий: ' + currentDriver;
-        currentItem.style.backgroundColor = '#e8f0fe';
-        currentItem.style.cursor = 'default';
-        menu.appendChild(currentItem);
+
+    if (currentDriver) {
+        const cur = document.createElement('div');
+        cur.className = 'context-item';
+        cur.textContent = '✅ Текущий: ' + currentDriver;
+        cur.style.backgroundColor = '#e8f0fe'; cur.style.cursor = 'default';
+        menu.appendChild(cur);
     }
-    state.drivers.forEach(function(d) {
+
+    state.drivers.forEach(d => {
         const item = document.createElement('div');
         item.className = 'context-item';
         const isCurrent = d.full_name === currentDriver;
         item.textContent = isCurrent ? '✓ ' + d.full_name : d.full_name;
-        if (isCurrent) {
-            item.style.backgroundColor = '#e8f0fe';
-            item.style.fontWeight = 'bold';
-        }
-        item.onclick = function() {
-            menu.style.display = 'none';
-            assignDriver(orderId, d.id);
-        };
+        if (isCurrent) { item.style.backgroundColor = '#e8f0fe'; item.style.fontWeight = 'bold'; }
+        item.onclick = () => { menu.style.display = 'none'; assignDriver(orderId, d.id); };
         menu.appendChild(item);
     });
-    if (currentDriver && currentDriver !== '') {
-        const removeItem = document.createElement('div');
-        removeItem.className = 'context-item';
-        removeItem.textContent = '❌ Снять водителя';
-        removeItem.style.borderTop = '1px solid #e0e0e0';
-        removeItem.style.color = '#EA4335';
-        removeItem.onclick = function() {
-            menu.style.display = 'none';
-            assignDriver(orderId, null);
-        };
-        menu.appendChild(removeItem);
+
+    if (currentDriver) {
+        const rm = document.createElement('div');
+        rm.className = 'context-item';
+        rm.textContent = '❌ Снять водителя';
+        rm.style.borderTop = '1px solid #e0e0e0'; rm.style.color = '#EA4335';
+        rm.onclick = () => { menu.style.display = 'none'; assignDriver(orderId, null); };
+        menu.appendChild(rm);
     }
 }
 
 async function assignDriver(orderId, driverId) {
     try {
         const order = state.orders.find(o => o.id === orderId);
-        if (!order) {
-            alert('Заявка не найдена');
-            return;
-        }
-        const allowedStatuses = ['Создана', 'Назначена'];
-        if (!allowedStatuses.includes(order.status)) {
+        if (!order) { alert('Заявка не найдена'); return; }
+        if (!['Создана', 'Назначена'].includes(order.status)) {
             alert('❌ Нельзя назначить водителя. Статус заявки должен быть "Создана" или "Назначена".');
             return;
         }
         const assignedStatus = state.statuses.find(s => s.name === 'Назначена');
-        if (!assignedStatus) {
-            alert('Статус "Назначена" не найден');
-            return;
-        }
+        if (!assignedStatus) { alert('Статус "Назначена" не найден'); return; }
+
         await apiFetch(`/order/${orderId}/assign`, {
             method: 'PUT',
-            body: JSON.stringify({ 
-                driver_id: driverId,
-                status_id: assignedStatus.id  
-            }),
+            body: JSON.stringify({ driver_id: driverId, status_id: assignedStatus.id }),
         });
         alert('✅ Водитель назначен!');
-        await loadOrders();
-        resetFilters();
-        renderCurrentPage();
+        await loadOrders(); resetFilters(); renderCurrentPage();
     } catch (error) {
         console.error('Ошибка назначения водителя:', error);
         alert('❌ Ошибка назначения водителя: ' + error.message);
@@ -489,24 +396,14 @@ async function assignDriver(orderId, driverId) {
 // СОЗДАНИЕ ЗАЯВКИ
 // ============================================================
 async function createOrder(pickupAddress, deliveryAddress, weight) {
-    if (!state.user) {
-        alert('Пользователь не авторизован');
-        return;
-    }
+    if (!state.user) { alert('Пользователь не авторизован'); return; }
     try {
-        if (!state.managers || state.managers.length === 0) {
-            await loadManagers();
-        }
+        if (!state.managers || state.managers.length === 0) await loadManagers();
         const manager = getRandomManager();
-        if (!manager) {
-            alert('Нет доступных менеджеров в системе');
-            return;
-        }
+        if (!manager) { alert('Нет доступных менеджеров в системе'); return; }
         const createdStatus = state.statuses.find(s => s.name === 'Создана');
-        if (!createdStatus) {
-            alert('Статус "Создана" не найден');
-            return;
-        }
+        if (!createdStatus) { alert('Статус "Создана" не найден'); return; }
+
         const orderData = {
             client_id: state.user.id,
             manager_id: manager.id,
@@ -516,15 +413,9 @@ async function createOrder(pickupAddress, deliveryAddress, weight) {
             pickup_address: pickupAddress,
             delivery_address: deliveryAddress
         };
-        console.log('📦 Данные заявки:', orderData);
-        await apiFetch('/orders', {
-            method: 'POST',
-            body: JSON.stringify(orderData),
-        });
+        await apiFetch('/orders', { method: 'POST', body: JSON.stringify(orderData) });
         alert('✅ Заявка создана! Менеджер: ' + manager.full_name);
-        await loadOrders();
-        resetFilters();
-        navigate('lkk');
+        await loadOrders(); resetFilters(); navigate('lkk');
     } catch (error) {
         console.error('❌ Ошибка создания заявки:', error);
         alert('❌ Ошибка создания заявки: ' + error.message);
@@ -534,13 +425,10 @@ async function createOrder(pickupAddress, deliveryAddress, weight) {
 async function updateOrderStatus(orderId, statusId) {
     try {
         await apiFetch(`/order/${orderId}/status`, {
-            method: 'PUT',
-            body: JSON.stringify({ status_id: statusId }),
+            method: 'PUT', body: JSON.stringify({ status_id: statusId }),
         });
         alert('✅ Статус обновлён');
-        await loadOrders();
-        resetFilters();
-        renderCurrentPage();
+        await loadOrders(); resetFilters(); renderCurrentPage();
     } catch (error) {
         alert('❌ Ошибка обновления статуса: ' + error.message);
     }
@@ -553,7 +441,7 @@ function renderMain() {
     document.getElementById('app').innerHTML = `
         <div class="header">
             <div class="logo" onclick="handleLogoClick(event)">ТЛК Портал</div>
-            <div></div>
+            <div style="font-size:12px;color:#9AA0A6;">схема: ${USER_SCHEMA}</div>
         </div>
         <div style="text-align:center;padding:20px 0 0 0;">
             <h1 style="font-size:32px;font-weight:700;color:#202124;">ТЛК Портал</h1>
@@ -574,14 +462,18 @@ function renderLogin(role) {
     document.getElementById('app').innerHTML = `
         <div class="header">
             <div class="logo" onclick="handleLogoClick(event)">ТЛК Портал</div>
-            <div></div>
+            <div style="font-size:12px;color:#9AA0A6;">схема: ${USER_SCHEMA}</div>
         </div>
         <div class="form-container" style="margin:40px auto;max-width:400px;">
             <h2 style="font-size:28px;font-weight:700;margin-bottom:8px;">Вход в систему</h2>
             <p style="color:#5F6368;margin-bottom:24px;">Введите учётные данные</p>
             <div class="form-group">
                 <label>Роль</label>
-                <input type="text" id="login-role" placeholder="client / manager / driver" value="${roleValue}">
+                <select id="login-role">
+                    <option value="client"  ${roleValue === 'client'  ? 'selected' : ''}>client (клиент)</option>
+                    <option value="manager" ${roleValue === 'manager' ? 'selected' : ''}>manager (менеджер)</option>
+                    <option value="driver"  ${roleValue === 'driver'  ? 'selected' : ''}>driver (водитель)</option>
+                </select>
             </div>
             <div class="form-group"><label>Логин</label><input type="text" id="login-username" placeholder="Введите логин" value=""></div>
             <div class="form-group"><label>Пароль</label><input type="password" id="login-password" placeholder="Введите пароль" value=""></div>
@@ -597,25 +489,17 @@ async function handleLogin() {
     const role = document.getElementById('login-role').value.trim();
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value.trim();
-    if (!role || !username || !password) {
-        alert('Заполните все поля');
-        return;
-    }
+    if (!role || !username || !password) { alert('Заполните все поля'); return; }
+
     try {
         const user = await login(username, password, role);
         state.user = user;
-        await loadStatuses();
-        await loadManagers();
-        await loadDrivers();
-        await loadOrders();
+        await loadStatuses(); await loadManagers(); await loadDrivers(); await loadOrders();
         resetFilters();
         if (role === 'client') navigate('lkk');
         else if (role === 'manager') navigate('lkm');
         else if (role === 'driver') navigate('lkv');
-        else {
-            alert('Неизвестная роль. Войдите как client, manager или driver.');
-            navigate('main');
-        }
+        else { alert('Неизвестная роль.'); navigate('main'); }
     } catch (error) {
         alert('❌ Ошибка входа: ' + error.message);
     }
@@ -626,12 +510,9 @@ function navigate(page, param = null) {
     const pages = {
         main: renderMain,
         login: () => renderLogin(param),
-        lkk: renderLKK,
-        lkm: renderLKM,
-        lkv: renderLKV,
+        lkk: renderLKK, lkm: renderLKM, lkv: renderLKV,
         'create-order': renderCreateOrder,
-        contacts: renderContacts,
-        about: renderAbout
+        contacts: renderContacts, about: renderAbout
     };
     (pages[page] || renderMain)();
 }
@@ -647,10 +528,7 @@ function renderCurrentPage() {
 // СОЗДАНИЕ ЗАЯВКИ (страница)
 // ============================================================
 function renderCreateOrder() {
-    if (!state.user || state.user.role !== 'client') {
-        navigate('login', 'client');
-        return;
-    }
+    if (!state.user || state.user.role !== 'client') { navigate('login', 'client'); return; }
     document.getElementById('app').innerHTML = `
         <div class="header">
             <div class="logo" onclick="handleLogoClick(event)">ТЛК Портал</div>
@@ -682,13 +560,15 @@ async function handleCreateOrder() {
     const deliveryStreet = document.getElementById('delivery-street').value;
     const deliveryHouse = document.getElementById('delivery-house').value;
     const weight = document.getElementById('order-weight').value;
+
     if (!pickupCity || !pickupStreet || !pickupHouse || !deliveryCity || !deliveryStreet || !deliveryHouse || !weight) {
-        alert('Заполните все поля');
-        return;
+        alert('Заполните все поля'); return;
     }
-    const pickupAddress = `${pickupCity}, ${pickupStreet}, ${pickupHouse}`;
-    const deliveryAddress = `${deliveryCity}, ${deliveryStreet}, ${deliveryHouse}`;
-    await createOrder(pickupAddress, deliveryAddress, weight);
+    await createOrder(
+        `${pickupCity}, ${pickupStreet}, ${pickupHouse}`,
+        `${deliveryCity}, ${deliveryStreet}, ${deliveryHouse}`,
+        weight
+    );
 }
 
 // ============================================================
@@ -698,7 +578,7 @@ function renderContacts() {
     document.getElementById('app').innerHTML = `
         <div class="header">
             <div class="logo" onclick="handleLogoClick(event)">ТЛК Портал</div>
-            <div></div>
+            <div style="font-size:12px;color:#9AA0A6;">схема: ${USER_SCHEMA}</div>
         </div>
         <h1 class="page-title">Контакты</h1>
         <div style="padding:20px 40px;font-size:18px;">
@@ -713,12 +593,11 @@ function renderAbout() {
     document.getElementById('app').innerHTML = `
         <div class="header">
             <div class="logo" onclick="handleLogoClick(event)">ТЛК Портал</div>
-            <div></div>
+            <div style="font-size:12px;color:#9AA0A6;">схема: ${USER_SCHEMA}</div>
         </div>
         <h1 class="page-title">О компании</h1>
         <div style="padding:20px 40px;font-size:16px;max-width:800px;line-height:1.6;">
             <p>ООО «ТрансЛогистик» — российская транспортная компания, осуществляющая грузовые автомобильные перевозки по территории Российской Федерации.</p>
-            <p>Предприятие обслуживает юридических лиц — промышленные заводы, строительные организации, торговые сети, дистрибьюторские компании.</p>
             <p>Штатная структура:</p>
             <ul style="padding-left:20px;">
                 <li>18 менеджеров по работе с клиентами</li>
@@ -730,11 +609,11 @@ function renderAbout() {
 }
 
 // ============================================================
-// ВСПОМОГАТЕЛЬНАЯ ФУНКЦИЯ ДЛЯ ЭКРАНИРОВАНИЯ
+// ЭКРАНИРОВАНИЕ
 // ============================================================
 function escapeHtml(str) {
     if (!str) return '';
-    return String(str).replace(/[&<>"']/g, function(m) {
+    return String(str).replace(/[&<>"']/g, m => {
         if (m === '&') return '&amp;';
         if (m === '<') return '&lt;';
         if (m === '>') return '&gt;';
@@ -750,30 +629,18 @@ function escapeHtml(str) {
 const contextMenu = document.createElement('div');
 contextMenu.id = 'context-menu';
 contextMenu.style.cssText = `
-    position: fixed;
-    display: none;
-    background: white;
-    border: 1px solid #ccc;
-    border-radius: 8px;
+    position: fixed; display: none; background: white;
+    border: 1px solid #ccc; border-radius: 8px;
     box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    min-width: 150px;
-    z-index: 1000;
-    padding: 4px 0;
-    font-size: 14px;
-    font-family: inherit;
+    min-width: 150px; z-index: 1000; padding: 4px 0;
+    font-size: 14px; font-family: inherit;
 `;
 document.body.appendChild(contextMenu);
 
 const style = document.createElement('style');
 style.textContent = `
-    .context-item {
-        padding: 8px 16px;
-        cursor: pointer;
-        transition: background 0.15s;
-    }
-    .context-item:hover {
-        background: #f1f3f4;
-    }
+    .context-item { padding: 8px 16px; cursor: pointer; transition: background 0.15s; }
+    .context-item:hover { background: #f1f3f4; }
 `;
 document.head.appendChild(style);
 
@@ -783,7 +650,6 @@ document.addEventListener('click', (e) => {
         if (menu) menu.style.display = 'none';
     }
 });
-
 document.addEventListener('contextmenu', (e) => {
     if (!e.target.closest('.status-cell') && !e.target.closest('.driver-cell')) {
         const menu = document.getElementById('context-menu');
@@ -792,7 +658,7 @@ document.addEventListener('contextmenu', (e) => {
 });
 
 // ============================================================
-// ДЕЛАЕМ ФУНКЦИИ ГЛОБАЛЬНЫМИ
+// ГЛОБАЛЬНЫЕ ССЫЛКИ
 // ============================================================
 window.showDriverSelectionMenu = showDriverSelectionMenu;
 window.assignDriver = assignDriver;
@@ -807,6 +673,40 @@ window.navigateWithRole = navigateWithRole;
 window.navigateCreateOrder = navigateCreateOrder;
 
 // ============================================================
-// ЗАПУСК
+// ЗАПУСК (с восстановлением сессии; схема всегда из конфига)
 // ============================================================
-navigate('main');
+(function bootstrap() {
+    console.log(`[TLK] Старт. Схема: ${USER_SCHEMA}, API: ${API_URL}`);
+
+    const savedUser = localStorage.getItem('user_data');
+    const savedSchema = localStorage.getItem('user_schema');
+
+    // Сессия восстанавливается ТОЛЬКО если схема в localStorage совпадает
+    // с текущим конфигом. Иначе — сброс (защита от «перекопировал localStorage»).
+    if (savedUser && savedSchema === USER_SCHEMA) {
+        try {
+            state.user = JSON.parse(savedUser);
+            (async () => {
+                await loadStatuses();
+                await loadManagers();
+                await loadDrivers();
+                await loadOrders();
+                resetFilters();
+            })().catch(err => console.warn('Не удалось восстановить данные:', err));
+
+            if (state.user.role === 'client')  return navigate('lkk');
+            if (state.user.role === 'manager') return navigate('lkm');
+            if (state.user.role === 'driver')  return navigate('lkv');
+        } catch (e) {
+            console.warn('Битые данные сессии, очищаю');
+            localStorage.removeItem('user_data');
+            localStorage.removeItem('user_schema');
+        }
+    } else if (savedUser && savedSchema !== USER_SCHEMA) {
+        console.log(`[TLK] Сессия из схемы ${savedSchema} не подходит для ${USER_SCHEMA}, сбрасываю.`);
+        localStorage.removeItem('user_data');
+        localStorage.removeItem('user_schema');
+    }
+
+    navigate('main');
+})();
