@@ -21,6 +21,11 @@ const TLK_CONFIG = window.TLK_CONFIG || {};
 const API_URL = TLK_CONFIG.API_URL || 'http://10.2.9.17:8000';
 const USER_SCHEMA = TLK_CONFIG.SCHEMA || 'tlk01';
 
+// ─── НОВОЕ: параметры публичного портала Wagtail CMS ────────
+const CMS_URL = TLK_CONFIG.CMS_URL || 'http://localhost:8001';
+const CMS_TITLE = TLK_CONFIG.CMS_TITLE || 'Справочник тарифов';
+// ─────────────────────────────────────────────────────────────
+
 if (!window.TLK_CONFIG) {
     console.error('[TLK] config.js не загружен. Проверьте подключение <script src="config.js"> в index.html.');
 }
@@ -33,7 +38,7 @@ async function apiFetch(endpoint, options = {}) {
 
     const headers = {
         'Content-Type': 'application/json',
-        'X-User-Schema': USER_SCHEMA,       // идентификация схемы экземпляра
+        'X-User-Schema': USER_SCHEMA,
         ...(options.headers || {})
     };
 
@@ -72,7 +77,6 @@ async function login(username, password, role) {
         throw new Error(`Роль не совпадает. Ожидается ${role}, получена ${user.role}`);
     }
 
-    // Запоминаем сессию (вместе со схемой — для проверки при восстановлении)
     localStorage.setItem('user_data', JSON.stringify(user));
     localStorage.setItem('user_schema', USER_SCHEMA);
 
@@ -275,6 +279,26 @@ function handleLogoClick(e) {
 }
 
 // ============================================================
+// НОВОЕ: ПЕРЕХОД В CMS
+// ============================================================
+/**
+ * Открывает публичный портал Wagtail CMS в новой вкладке.
+ * К URL добавляется ?tenant=<SCHEMA>, чтобы CMS в будущем
+ * могла учитывать контекст арендатора (tlkNN).
+ */
+function openCms() {
+    try {
+        const url = new URL(CMS_URL);
+        url.searchParams.set('tenant', USER_SCHEMA);
+        window.open(url.toString(), '_blank', 'noopener,noreferrer');
+    } catch (e) {
+        console.error('[CMS] Некорректный CMS_URL:', CMS_URL, e);
+        alert('Не удалось открыть справочник тарифов. Проверьте CMS_URL в config.js');
+    }
+}
+// ─────────────────────────────────────────────────────────────
+
+// ============================================================
 // КОНТЕКСТНЫЕ МЕНЮ
 // ============================================================
 function showContextMenu(e, status) {
@@ -453,6 +477,12 @@ function renderMain() {
             <div class="main-card" onclick="navigateWithRole('lkv', 'driver')"><h3>🚛 Личный кабинет водителя</h3><p>Отслеживайте рейсы</p></div>
             <div class="main-card" onclick="navigate('contacts')"><h3>📞 Контакты</h3><p>Свяжитесь с нами</p></div>
             <div class="main-card" onclick="navigate('about')"><h3>ℹ️ О компании</h3><p>Узнайте о нас</p></div>
+            <!-- НОВОЕ: карточка перехода в Wagtail CMS -->
+            <div class="main-card" onclick="openCms()" style="border: 2px dashed #1A73E8;">
+                <h3>📚 ${CMS_TITLE}</h3>
+                <p>Публичный справочник тарифов и направлений</p>
+            </div>
+            <!-- /НОВОЕ -->
         </div>
     `;
 }
@@ -671,18 +701,17 @@ window.showSitemap = showSitemap;
 window.handleLogin = handleLogin;
 window.navigateWithRole = navigateWithRole;
 window.navigateCreateOrder = navigateCreateOrder;
+window.openCms = openCms;  // НОВОЕ
 
 // ============================================================
 // ЗАПУСК (с восстановлением сессии; схема всегда из конфига)
 // ============================================================
 (function bootstrap() {
-    console.log(`[TLK] Старт. Схема: ${USER_SCHEMA}, API: ${API_URL}`);
+    console.log(`[TLK] Старт. Схема: ${USER_SCHEMA}, API: ${API_URL}, CMS: ${CMS_URL}`);
 
     const savedUser = localStorage.getItem('user_data');
     const savedSchema = localStorage.getItem('user_schema');
 
-    // Сессия восстанавливается ТОЛЬКО если схема в localStorage совпадает
-    // с текущим конфигом. Иначе — сброс (защита от «перекопировал localStorage»).
     if (savedUser && savedSchema === USER_SCHEMA) {
         try {
             state.user = JSON.parse(savedUser);
